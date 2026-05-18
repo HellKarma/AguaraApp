@@ -1,0 +1,325 @@
+@import url('https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,700;0,900;1,400&family=Inter:wght@300;400;600;700&display=swap');
+
+:root {
+  /* Colors - Mística Salvaje Nocturna (Deep, Primal) */
+  --bg-deep-black: #000000;
+  --bg-obsidian: #030303;
+  --bg-charcoal: #080808;
+
+  --fire-orange: #ff4500;
+  --fire-orange-rgb: 255, 69, 0;
+  --fire-red: #d42000;
+  --fire-red-rgb: 212, 32, 0;
+  --amber-warm: #ff8c00;
+  --ember-glow: rgba(255, 69, 0, 0.4);
+
+  --text-primary: #ffffff;
+  --text-secondary: rgba(255, 255, 255, 0.85);
+  --text-muted: rgba(255, 255, 255, 0.35);
+
+  /* Typography */
+  --font-serif: 'Playfair Display', serif;
+  --font-sans: 'Inter', sans-serif;
+
+  /* Aesthetic Tokens */
+  --radius-tribal: 4px 16px 4px 16px;
+  --shadow-carved: inset 0 2px 4px rgba(255, 255, 255, 0.05),
+    inset 0 -2px 4px rgba(0, 0, 0, 0.8),
+    0 10px 30px rgba(0, 0, 0, 0.5);
+  --shadow-fire: 0 0 20px rgba(var(--fire-orange-rgb), 0.2);
+  --border-glass: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+body {
+  background-color: var(--bg-deep-black);
+  color: var(--text-primary);
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+  min-height: 100vh;
+  overflow-x: hidden;
+  line-height: 1.5;
+}
+
+/* --- THE ATMOSPHERE --- */
+
+/* Smoke/Fog Layer */
+.smoke-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 200%;
+  height: 200%;
+  background-image:
+    radial-gradient(circle at 20% 30%, rgba(255, 69, 0, 0.03), transparent 40%),
+    radial-gradient(circle at 80% 70%, rgba(212, 32, 0, 0.02), transparent 40%);
+  pointer-events: none;
+  z-index: 1;
+  animation: drift 60s linear infinite;
+}
+
+@keyframes drift {
+  from {
+    transform: translate(-25%, -25%);
+  }
+
+  to {
+    transform: translate(0%, 0%);
+  }
+}
+
+/* Global Vignette (Mystical Shadow) */
+body::after {
+  content: "";
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background: radial-gradient(circle at center, transparent 20%, rgba(0, 0, 0, 0.9) 100%);
+  pointer-events: none;
+  z-index: 2;
+}
+
+/* Background Texture Grit */
+body::before {
+  content: "";
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background-image: url("https://www.transparenttextures.com/patterns/dark-leather.png");
+  opacity: 0.08;
+  pointer-events: none;
+  z-index: 0;
+}
+
+/* --- LAYOUT --- */
+
+.app-container {
+  position: relative;
+  z-index: 10;
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+}
+
+.header {
+  height: 6rem;
+  padding: 0 4rem;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  border-bottom: 1px solid rgba(255, 69, 0, 0.1);
+  background: rgba(0, 0, 0, 0.8);
+  backdrop-filter: blur(20px);
+  position: sticky;
+  top: 0;
+  z-index: 100;
+}
+
+/* --- COMPONENTS --- */
+
+.logo-container {
+  display: flex;
+  align-items: center;
+  gap: 1.5rem;
+}
+
+.logo-icon {
+  width: 50px;
+  height: 50px;
+  background: linear-gradient(135deg, var(--fire-orange), var(--fire-red));
+  border-radius: var(--radius-tribal);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 0 30px rgba(var(--fire-orange-rgb), 0.5);
+  transform: rotate(-5deg);
+}
+
+.logo-text {
+  font-family: var(--font-serif);
+  font-size: 2rem;
+  font-weight: 900;
+  text-transform: uppercase;
+  letter-spacing: 0.5rem;
+  color: #fff;
+  text-shadow: 0 0 15px rgba(var(--fire-orange-rgb), 0.6);
+}
+
+.nav {
+  display: flex;
+  gap: 3rem;
+}
+
+.nav-link {
+  font-family: var(--font-serif);
+  font-size: 0.9rem;
+  text-transform: uppercase;
+  letter-spacing: 0.2rem;
+  color: var(--text-muted);
+  text-decoration: none;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  transition: all 0.3s ease;
+}
+
+.nav-link:hover,
+.nav-link.active {
+  color: var(--fire-orange);
+  text-shadow: 0 0 10px var(--fire-orange-glow);
+}
+
+.obsidian-card {
+  background: linear-gradient(145deg, #0a0a0a, #020202);
+  border: var(--border-glass);
+  border-radius: var(--radius-tribal);
+  box-shadow: var(--shadow-carved);
+  position: relative;
+  overflow: hidden;
+  transition: all 0.4s cubic-bezier(0.165, 0.84, 0.44, 1);
+}
+
+.obsidian-card::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background-image: url("https://www.transparenttextures.com/patterns/dark-wood.png");
+  opacity: 0.05;
+  pointer-events: none;
+}
+
+.obsidian-card:hover {
+  border-color: rgba(var(--fire-orange-rgb), 0.4);
+  box-shadow: 0 0 40px rgba(var(--fire-orange-rgb), 0.1), var(--shadow-carved);
+  transform: translateY(-4px) scale(1.01);
+}
+
+/* Fire Pulse Text */
+.fire-text {
+  color: var(--fire-orange);
+  text-shadow: 0 0 10px rgba(var(--fire-orange-rgb), 0.5);
+  font-weight: 700;
+}
+
+/* Typography Overrides */
+.title-xl {
+  font-size: 4rem;
+  font-weight: 900;
+  line-height: 1;
+  margin-bottom: 2rem;
+}
+
+.text-mystic {
+  font-family: var(--font-serif);
+  font-style: italic;
+  color: var(--text-secondary);
+}
+
+/* --- BUTTONS --- */
+
+.primary-button {
+  background: linear-gradient(to right, var(--fire-red), var(--fire-orange));
+  color: white;
+  padding: 1rem 2rem;
+  border: none;
+  border-radius: 4px;
+  font-family: var(--font-sans);
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.15rem;
+  cursor: pointer;
+  box-shadow: 0 4px 15px rgba(var(--fire-orange-rgb), 0.3);
+  transition: all 0.3s ease;
+}
+
+.primary-button:hover {
+  box-shadow: 0 0 25px rgba(var(--fire-orange-rgb), 0.6);
+  transform: translateY(-2px);
+}
+
+/* --- DASHBOARD ELEMENTS --- */
+
+.metrics-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: 2rem;
+  padding: 4rem;
+}
+
+.metric-card {
+  padding: 2rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.metric-label {
+  font-size: 0.7rem;
+  text-transform: uppercase;
+  letter-spacing: 0.2rem;
+  color: var(--text-muted);
+}
+
+.metric-value {
+  font-family: var(--font-serif);
+  font-size: 3rem;
+  font-weight: 700;
+  color: white;
+  line-height: 1;
+}
+
+.progress-track {
+  height: 6px;
+  background: rgba(255, 255, 255, 0.03);
+  border-radius: 3px;
+  margin-top: 1rem;
+  overflow: hidden;
+}
+
+.progress-bar {
+  height: 100%;
+  background: linear-gradient(90deg, var(--fire-red), var(--fire-orange), #fff);
+  box-shadow: 0 0 15px var(--fire-orange);
+  border-radius: 3px;
+}
+
+/* --- SCROLLBAR --- */
+
+::-webkit-scrollbar {
+  width: 5px;
+}
+
+::-webkit-scrollbar-track {
+  background: #000;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #1a1a1a;
+  border-radius: 10px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--fire-orange);
+}
+
+@media (max-width: 1024px) {
+  .metrics-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+
+  .header {
+    padding: 0 2rem;
+  }
+}
