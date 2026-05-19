@@ -50,6 +50,7 @@ export const useAguaraStore = create((set, get) => ({
     // --- Phase 5: Caja & Flujo de Efectivo ---
     cashRegister: {
         isOpen: false,
+        sessionId: null,
         openingBalance: 0,
         currentBalance: 0,
         totalRevenue: 0,
@@ -477,6 +478,23 @@ export const useAguaraStore = create((set, get) => ({
                 visit_count: (updatedCustomer.visit_count || 0) + 1
             }).eq('id', updatedCustomer.id).eq('tenant_id', tenantId);
         }
+        const { cashRegister } = get();
+        if (cashRegister.sessionId && paymentLogs.length) {
+            paymentLogs.forEach(log => {
+                supabase.from('cash_movements').insert({
+                    session_id: cashRegister.sessionId,
+                    tenant_id: tenantId,
+                    type: 'sale',
+                    amount: log.amount,
+                    method: log.method,
+                    note: log.note
+                });
+            });
+            supabase.from('cash_sessions').update({
+                total_revenue: (cashRegister.totalRevenue || 0) + finalAmount,
+                current_balance: cashRegister.currentBalance
+            }).eq('id', cashRegister.sessionId);
+        }
     },
 
     // --- Order Item Editing (carrito) ---
@@ -732,15 +750,42 @@ export const useAguaraStore = create((set, get) => ({
         set(state => ({ menu: state.menu.filter(p => p.id !== productId), loading: false }));
     },
 
-    addIngredient: (ingredient) => set((state) => ({
-        ingredients: [...state.ingredients, { ...ingredient, id: `i${Date.now()}` }]
-    })),
-    updateIngredient: (updatedIngredient) => set((state) => ({
-        ingredients: state.ingredients.map(i => i.id === updatedIngredient.id ? updatedIngredient : i)
-    })),
-    deleteIngredient: (ingredientId) => set((state) => ({
-        ingredients: state.ingredients.filter(i => i.id !== ingredientId)
-    })),
+    fetchIngredients: async () => {
+        const tenantId = getTenantId(); if (!tenantId) return;
+        set({ loading: true, error: null });
+        const { data, error } = await supabase.from('ingredients').select('*').eq('tenant_id', tenantId).order('name');
+        if (error) { set({ loading: false, error: error.message }); return; }
+        set({ ingredients: data.map(i => ({ ...i, currentStock: i.current_stock, minStock: i.min_stock })), loading: false });
+    },
+    addIngredient: async (ingredient) => {
+        const tenantId = getTenantId(); if (!tenantId) return;
+        const tempId = `temp_i_${Date.now()}`;
+        set(state => ({ ingredients: [...state.ingredients, { ...ingredient, id: tempId }] }));
+        const { data, error } = await supabase.from('ingredients').insert({
+            name: ingredient.name,
+            unit: ingredient.unit,
+            current_stock: ingredient.currentStock ?? ingredient.current_stock ?? 0,
+            min_stock: ingredient.minStock ?? ingredient.min_stock ?? 0,
+            tenant_id: tenantId
+        }).select().single();
+        if (error) { set(state => ({ ingredients: state.ingredients.filter(i => i.id !== tempId), error: error.message })); return; }
+        set(state => ({ ingredients: state.ingredients.map(i => i.id === tempId ? { ...data, currentStock: data.current_stock, minStock: data.min_stock } : i) }));
+    },
+    updateIngredient: async (updatedIngredient) => {
+        const tenantId = getTenantId(); if (!tenantId) return;
+        set(state => ({ ingredients: state.ingredients.map(i => i.id === updatedIngredient.id ? updatedIngredient : i) }));
+        await supabase.from('ingredients').update({
+            name: updatedIngredient.name,
+            unit: updatedIngredient.unit,
+            current_stock: updatedIngredient.currentStock ?? updatedIngredient.current_stock ?? 0,
+            min_stock: updatedIngredient.minStock ?? updatedIngredient.min_stock ?? 0
+        }).eq('id', updatedIngredient.id).eq('tenant_id', tenantId);
+    },
+    deleteIngredient: async (ingredientId) => {
+        const tenantId = getTenantId(); if (!tenantId) return;
+        set(state => ({ ingredients: state.ingredients.filter(i => i.id !== ingredientId) }));
+        await supabase.from('ingredients').delete().eq('id', ingredientId).eq('tenant_id', tenantId);
+    },
 
     updateRecipe: (productId, ingredientsList) => set((state) => ({
         recipes: { ...state.recipes, [productId]: ingredientsList }
@@ -847,73 +892,155 @@ export const useAguaraStore = create((set, get) => ({
     })),
 
     // --- Caja Actions ---
-    openShift: (amount) => set((state) => ({
-        cashRegister: {
-            ...state.cashRegister,
-            isOpen: true,
-            openingBalance: amount,
-            currentBalance: amount,
-            openingDate: new Date().toISOString(),
-            logs: [{
-                id: `open_${Date.now()}`,
-                date: new Date().toISOString(),
-                type: 'open',
-                amount: amount,
-                method: 'cash',
-                note: 'Apertura de Caja'
-            }]
-        }
-    })),
+    fetchCashSession: async () => {
+        const tenantId = getTenantId();
+        if (!tenantId) return;
+        const { data: session } = await supabase
+            .from('cash_sessions')
+            .select('*')
+            .eq('tenant_id', tenantId)
+            .eq('status', 'open')
+            .single();
+        if (!session) return;
 
-    closeShift: () => set((state) => {
-        const closeLog = {
-            id: `close_${Date.now()}`,
-            date: new Date().toISOString(),
-            type: 'close',
-            amount: state.cashRegister.currentBalance,
-            method: 'cash',
-            note: 'Cierre de Caja'
-        };
-        const snapshot = {
-            id: `shift_${Date.now()}`,
-            openDate: state.cashRegister.openingDate,
-            closeDate: closeLog.date,
-            openBalance: state.cashRegister.openingBalance,
-            closeBalance: state.cashRegister.currentBalance,
-            totalRevenue: state.cashRegister.totalRevenue || 0,
-            logs: [closeLog, ...state.cashRegister.logs]
-        };
-        return {
+        const { data: movements } = await supabase
+            .from('cash_movements')
+            .select('*')
+            .eq('session_id', session.id)
+            .order('created_at', { ascending: false });
+
+        const logs = (movements || []).map(m => ({
+            id: m.id, date: m.created_at, type: m.type,
+            amount: m.amount, method: m.method, note: m.note
+        }));
+
+        set({
             cashRegister: {
-                ...state.cashRegister,
-                isOpen: false,
-                logs: [closeLog, ...state.cashRegister.logs]
-            },
-            shiftHistory: [snapshot, ...state.shiftHistory]
+                isOpen: true,
+                sessionId: session.id,
+                openingBalance: session.opening_balance,
+                currentBalance: session.current_balance,
+                totalRevenue: session.total_revenue || 0,
+                openingDate: session.opened_at,
+                logs
+            }
+        });
+    },
+
+    openShift: async (amount) => {
+        const tenantId = getTenantId();
+        const now = new Date().toISOString();
+        const { data: session, error } = await supabase
+            .from('cash_sessions')
+            .insert({ tenant_id: tenantId, opening_balance: amount, current_balance: amount, total_revenue: 0, status: 'open', opened_at: now })
+            .select().single();
+        if (error) return;
+
+        const { data: openLog } = await supabase
+            .from('cash_movements')
+            .insert({ session_id: session.id, tenant_id: tenantId, type: 'open', amount, method: 'cash', note: 'Apertura de Caja' })
+            .select().single();
+
+        set({
+            cashRegister: {
+                isOpen: true,
+                sessionId: session.id,
+                openingBalance: amount,
+                currentBalance: amount,
+                totalRevenue: 0,
+                openingDate: now,
+                logs: openLog ? [{ id: openLog.id, date: openLog.created_at, type: 'open', amount, method: 'cash', note: 'Apertura de Caja' }] : []
+            }
+        });
+    },
+
+    closeShift: async () => {
+        const state = get();
+        const { sessionId, currentBalance, openingBalance, openingDate, totalRevenue, logs } = state.cashRegister;
+        const tenantId = getTenantId();
+        const now = new Date().toISOString();
+
+        if (sessionId) {
+            await supabase.from('cash_sessions').update({
+                status: 'closed', closing_balance: currentBalance,
+                total_revenue: totalRevenue, closed_at: now
+            }).eq('id', sessionId).eq('tenant_id', tenantId);
+
+            await supabase.from('cash_movements').insert({
+                session_id: sessionId, tenant_id: tenantId,
+                type: 'close', amount: currentBalance, method: 'cash', note: 'Cierre de Caja'
+            });
+        }
+
+        const closeLog = { id: `close_${Date.now()}`, date: now, type: 'close', amount: currentBalance, method: 'cash', note: 'Cierre de Caja' };
+        const snapshot = {
+            id: sessionId || `shift_${Date.now()}`,
+            openDate: openingDate, closeDate: now,
+            openBalance: openingBalance, closeBalance: currentBalance,
+            totalRevenue: totalRevenue || 0,
+            logs: [closeLog, ...logs]
         };
-    }),
 
-    addCashMovement: (type, amount, method, note) => set((state) => {
+        set(state => ({
+            cashRegister: { ...state.cashRegister, isOpen: false, sessionId: null, logs: [closeLog, ...logs] },
+            shiftHistory: [snapshot, ...state.shiftHistory]
+        }));
+    },
+
+    addCashMovement: async (type, amount, method, note) => {
         const numericAmount = Number(amount);
+        const { cashRegister } = get();
+        const tenantId = getTenantId();
         const newBalance = type === 'expense'
-            ? state.cashRegister.currentBalance - numericAmount
-            : state.cashRegister.currentBalance + numericAmount;
+            ? cashRegister.currentBalance - numericAmount
+            : cashRegister.currentBalance + numericAmount;
 
-        return {
+        const localLog = { id: `mv_${Date.now()}`, date: new Date().toISOString(), type, amount: numericAmount, method, note };
+
+        set(state => ({
             cashRegister: {
                 ...state.cashRegister,
                 currentBalance: newBalance,
-                logs: [{
-                    id: `mv_${Date.now()}`,
-                    date: new Date().toISOString(),
-                    type,
-                    amount: numericAmount,
-                    method,
-                    note
-                }, ...state.cashRegister.logs]
+                logs: [localLog, ...state.cashRegister.logs]
             }
-        };
-    }),
+        }));
+
+        if (cashRegister.sessionId) {
+            const { data } = await supabase.from('cash_movements')
+                .insert({ session_id: cashRegister.sessionId, tenant_id: tenantId, type, amount: numericAmount, method, note })
+                .select().single();
+            if (data) {
+                set(state => ({
+                    cashRegister: {
+                        ...state.cashRegister,
+                        logs: state.cashRegister.logs.map(l => l.id === localLog.id ? { ...l, id: data.id } : l)
+                    }
+                }));
+                await supabase.from('cash_sessions').update({ current_balance: newBalance }).eq('id', cashRegister.sessionId);
+            }
+        }
+    },
+
+    deleteCashMovement: async (logId) => {
+        const { cashRegister } = get();
+        const log = cashRegister.logs.find(l => l.id === logId);
+        if (!log || (log.type !== 'income' && log.type !== 'expense')) return;
+        const balanceAdjust = log.type === 'expense' ? log.amount : -log.amount;
+        const newBalance = cashRegister.currentBalance + balanceAdjust;
+
+        set(state => ({
+            cashRegister: {
+                ...state.cashRegister,
+                currentBalance: newBalance,
+                logs: state.cashRegister.logs.filter(l => l.id !== logId)
+            }
+        }));
+
+        supabase.from('cash_movements').delete().eq('id', logId);
+        if (cashRegister.sessionId) {
+            supabase.from('cash_sessions').update({ current_balance: newBalance }).eq('id', cashRegister.sessionId);
+        }
+    },
 
     // --- Intelligence Actions ---
     getProductProfitability: () => {
@@ -1052,24 +1179,64 @@ export const useAguaraStore = create((set, get) => ({
         };
     }),
 
-    // --- Caja Extensions ---
-    deleteCashMovement: (logId) => set((state) => {
-        const log = state.cashRegister.logs.find(l => l.id === logId);
-        if (!log || (log.type !== 'income' && log.type !== 'expense')) return state;
-        const balanceAdjust = log.type === 'expense' ? log.amount : -log.amount;
-        return {
-            cashRegister: {
-                ...state.cashRegister,
-                currentBalance: state.cashRegister.currentBalance + balanceAdjust,
-                logs: state.cashRegister.logs.filter(l => l.id !== logId)
-            }
-        };
-    }),
-
     getCustomerDiscount: (customerId) => {
         const { customers, vipConfig } = get();
         const customer = customers.find(c => c.id === customerId);
         if (!customer || customer.vipLevel === 'bronce') return 0;
         return vipConfig[customer.vipLevel]?.discount || 0;
+    },
+
+    subscribeRealtime: () => {
+        const tenantId = getTenantId(); if (!tenantId) return () => {};
+
+        const ordersChannel = supabase
+            .channel(`orders:${tenantId}`)
+            .on('postgres_changes', { event: '*', schema: 'public', table: 'orders', filter: `tenant_id=eq.${tenantId}` }, payload => {
+                if (payload.eventType === 'INSERT' || payload.eventType === 'UPDATE') {
+                    const order = payload.new;
+                    set(state => ({ activeOrders: { ...state.activeOrders, [order.table_id]: order.items || [] } }));
+                } else if (payload.eventType === 'DELETE') {
+                    set(state => {
+                        const next = { ...state.activeOrders };
+                        const tableId = payload.old?.table_id;
+                        if (tableId) delete next[tableId];
+                        return { activeOrders: next };
+                    });
+                }
+            })
+            .subscribe();
+
+        const tablesChannel = supabase
+            .channel(`tables:${tenantId}`)
+            .on('postgres_changes', { event: '*', schema: 'public', table: 'tables', filter: `tenant_id=eq.${tenantId}` }, payload => {
+                if (payload.eventType === 'INSERT') {
+                    const t = payload.new;
+                    set(state => {
+                        if (state.tables.find(tbl => tbl.id === t.id)) return state;
+                        return { tables: [...state.tables, t] };
+                    });
+                } else if (payload.eventType === 'UPDATE') {
+                    set(state => ({ tables: state.tables.map(tbl => tbl.id === payload.new.id ? payload.new : tbl) }));
+                } else if (payload.eventType === 'DELETE') {
+                    set(state => ({ tables: state.tables.filter(tbl => tbl.id !== payload.old.id) }));
+                }
+            })
+            .subscribe();
+
+        const historyChannel = supabase
+            .channel(`order_history:${tenantId}`)
+            .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'order_history', filter: `tenant_id=eq.${tenantId}` }, payload => {
+                const h = payload.new;
+                set(state => ({
+                    orderHistory: [{ ...h, tableName: h.table_name, customerId: h.customer_id }, ...state.orderHistory]
+                }));
+            })
+            .subscribe();
+
+        return () => {
+            supabase.removeChannel(ordersChannel);
+            supabase.removeChannel(tablesChannel);
+            supabase.removeChannel(historyChannel);
+        };
     }
 }));

@@ -11,7 +11,7 @@ export default function Inventory() {
     const {
         menu, categories, ingredients, ingredientCategories, recipes, modifiers, stockHistory,
         priceLists, priceOverrides, activePriceListId,
-        fetchCategories, fetchProducts,
+        fetchCategories, fetchProducts, fetchIngredients,
         addProduct, updateProduct, deleteProduct,
         addIngredient, updateIngredient, deleteIngredient,
         addCategory, addIngredientCategory,
@@ -24,6 +24,7 @@ export default function Inventory() {
     useEffect(() => {
         fetchCategories();
         fetchProducts();
+        fetchIngredients();
     }, []);
 
     const [activeTab, setActiveTab] = useState('products'); // products, ingredients, recipes, modifiers, movements, priceLists

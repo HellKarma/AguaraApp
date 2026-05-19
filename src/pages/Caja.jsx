@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
     Wallet,
     TrendingUp,
@@ -21,7 +21,9 @@ import {
 import { useAguaraStore } from '../store/aguaraStore';
 
 function Caja() {
-    const { cashRegister, shiftHistory, openShift, closeShift, addCashMovement, deleteCashMovement } = useAguaraStore();
+    const { cashRegister, shiftHistory, openShift, closeShift, addCashMovement, deleteCashMovement, fetchCashSession } = useAguaraStore();
+
+    useEffect(() => { fetchCashSession(); }, []);
     const [shiftHistoryOpen, setShiftHistoryOpen] = useState(false);
     const [openingAmount, setOpeningAmount] = useState('');
     const [movementModal, setMovementModal] = useState(null); // 'income' | 'expense'

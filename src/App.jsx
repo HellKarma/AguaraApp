@@ -38,6 +38,12 @@ function RoleGuard({ children, roles }) {
 function AuthenticatedApp() {
     const { role, loading } = useAuthStore();
 
+    useEffect(() => {
+        if (!role) return;
+        const unsubscribe = useAguaraStore.getState().subscribeRealtime();
+        return unsubscribe;
+    }, [role]);
+
     if (loading) {
         return (
             <div style={{ minHeight: '100vh', background: 'var(--bg-deep-black)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
