@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useAguaraStore } from '../store/aguaraStore';
 import {
     Search, Plus, Edit3, Trash2, AlertTriangle, X, Save,
@@ -11,14 +11,20 @@ export default function Inventory() {
     const {
         menu, categories, ingredients, ingredientCategories, recipes, modifiers, stockHistory,
         priceLists, priceOverrides, activePriceListId,
+        fetchCategories, fetchProducts,
         addProduct, updateProduct, deleteProduct,
         addIngredient, updateIngredient, deleteIngredient,
         addCategory, addIngredientCategory,
         updateCategory, deleteCategory, updateIngredientCategory, deleteIngredientCategory,
-        updateRecipe, setModifiers, adjustStock, addWaste, logMovement,
-        addPriceList, updatePriceOverride, setActivePriceList,
+        updateRecipe, deleteRecipe, setModifiers, adjustStock, addWaste, logMovement,
+        addPriceList, updatePriceOverride, setActivePriceList, deletePriceList, updatePriceList,
         bulkImportProducts, bulkImportIngredients, reconcileStock
     } = useAguaraStore();
+
+    useEffect(() => {
+        fetchCategories();
+        fetchProducts();
+    }, []);
 
     const [activeTab, setActiveTab] = useState('products'); // products, ingredients, recipes, modifiers, movements, priceLists
     const [searchTerm, setSearchTerm] = useState('');
@@ -141,18 +147,21 @@ export default function Inventory() {
                     />
                 )}
                 {activeTab === 'recipes' && (
-                    <RecipeGrid menu={menu} recipes={recipes} ingredients={ingredients} onEdit={(p) => openModal({ type: 'recipe', productId: p.id, ingredientsList: recipes[p.id] || [] })} />
+                    <RecipeGrid menu={menu} recipes={recipes} ingredients={ingredients} onEdit={(p) => openModal({ type: 'recipe', productId: p.id, ingredientsList: recipes[p.id] || [] })} onDelete={deleteRecipe} />
                 )}
                 {activeTab === 'modifiers' && (
-                    <ModifierGrid menu={menu} modifiers={modifiers} onEdit={(p) => openModal({ type: 'modifiers', productId: p.id, groups: modifiers[p.id] || [] })} />
+                    <ModifierGrid menu={menu} modifiers={modifiers} onEdit={(p) => openModal({ type: 'modifiers', productId: p.id, groups: modifiers[p.id] || [] })} onClear={(p) => setModifiers(p.id, [])} />
                 )}
                 {activeTab === 'priceLists' && (
                     <PriceListEditor
                         menu={menu}
                         priceLists={priceLists}
                         priceOverrides={priceOverrides}
+                        activePriceListId={activePriceListId}
                         onUpdatePrice={updatePriceOverride}
                         onAddList={addPriceList}
+                        onDeleteList={deletePriceList}
+                        onRenameList={updatePriceList}
                     />
                 )}
                 {activeTab === 'movements' && (
@@ -179,7 +188,7 @@ export default function Inventory() {
                 <ManagementModal
                     type={editingItem?.type || activeTab}
                     item={editingItem}
-                    ctx={{ categories, ingredients, menu }}
+                    ctx={{ categories, ingredientCategories, ingredients, menu }}
                     onClose={closeModal}
                     onSave={(data) => {
                         if (activeTab === 'products' && !editingItem?.type) {
@@ -229,23 +238,18 @@ function IngredientTable({ ingredients, ingredientCategories, selectedCategory, 
                     }}
                 >TODOS</button>
                 {ingredientCategories.map(cat => (
-                    <div key={cat.id} style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
+                    <div key={cat.id} style={{ display: 'flex', alignItems: 'center', gap: '2px' }}>
                         <button
                             onClick={() => setSelectedCategory(cat.id)}
                             style={{
                                 padding: '0.5rem 1rem', borderRadius: '20px', fontSize: '0.7rem', fontWeight: 800, cursor: 'pointer', transition: 'all 0.3s',
                                 background: selectedCategory === cat.id ? 'var(--fire-orange)' : 'rgba(255,255,255,0.05)',
                                 color: selectedCategory === cat.id ? 'black' : 'white',
-                                border: 'none', whiteSpace: 'nowrap',
-                                paddingRight: selectedCategory === cat.id ? '2.5rem' : '1rem'
+                                border: 'none', whiteSpace: 'nowrap'
                             }}
                         >{cat.name.toUpperCase()}</button>
-                        {selectedCategory === cat.id && (
-                            <div style={{ position: 'absolute', right: '5px', display: 'flex', gap: '2px' }}>
-                                <button title="Renombrar" onClick={(e) => { e.stopPropagation(); const name = prompt('Nuevo nombre:', cat.name); if (name) updateIngredientCategory(cat.id, name); }} style={{ background: 'transparent', border: 'none', color: 'black', cursor: 'pointer', display: 'flex' }}><Edit3 size={12} /></button>
-                                <button title="Eliminar" onClick={(e) => { e.stopPropagation(); if (confirm('¿Eliminar esta categoría?')) deleteIngredientCategory(cat.id); }} style={{ background: 'transparent', border: 'none', color: 'black', cursor: 'pointer', display: 'flex' }}><X size={12} /></button>
-                            </div>
-                        )}
+                        <button title="Renombrar" onClick={() => { const name = prompt('Nuevo nombre:', cat.name); if (name) updateIngredientCategory(cat.id, name); }} style={{ background: 'transparent', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', padding: '2px', display: 'flex', borderRadius: '4px' }}><Edit3 size={11} /></button>
+                        <button title="Eliminar" onClick={() => { if (confirm(`¿Eliminar categoría "${cat.name}"? Los ingredientes quedarán en "otros".`)) deleteIngredientCategory(cat.id); }} style={{ background: 'transparent', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', padding: '2px', display: 'flex', borderRadius: '4px' }}><X size={11} /></button>
                     </div>
                 ))}
                 <button
@@ -363,23 +367,18 @@ function ProductTable({ menu, categories, selectedCategory, setSelectedCategory,
                     }}
                 >TODOS</button>
                 {categories.map(cat => (
-                    <div key={cat.id} style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
+                    <div key={cat.id} style={{ display: 'flex', alignItems: 'center', gap: '2px' }}>
                         <button
                             onClick={() => setSelectedCategory(cat.id)}
                             style={{
                                 padding: '0.5rem 1rem', borderRadius: '20px', fontSize: '0.7rem', fontWeight: 800, cursor: 'pointer', transition: 'all 0.3s',
                                 background: selectedCategory === cat.id ? 'var(--fire-orange)' : 'rgba(255,255,255,0.05)',
                                 color: selectedCategory === cat.id ? 'black' : 'white',
-                                border: 'none', whiteSpace: 'nowrap',
-                                paddingRight: selectedCategory === cat.id ? '2.5rem' : '1rem'
+                                border: 'none', whiteSpace: 'nowrap'
                             }}
                         >{cat.name.toUpperCase()}</button>
-                        {selectedCategory === cat.id && (
-                            <div style={{ position: 'absolute', right: '5px', display: 'flex', gap: '2px' }}>
-                                <button title="Renombrar" onClick={(e) => { e.stopPropagation(); const name = prompt('Nuevo nombre:', cat.name); if (name) updateCategory(cat.id, name); }} style={{ background: 'transparent', border: 'none', color: 'black', cursor: 'pointer', display: 'flex' }}><Edit3 size={12} /></button>
-                                <button title="Eliminar" onClick={(e) => { e.stopPropagation(); if (confirm('¿Eliminar esta categoría?')) deleteCategory(cat.id); }} style={{ background: 'transparent', border: 'none', color: 'black', cursor: 'pointer', display: 'flex' }}><X size={12} /></button>
-                            </div>
-                        )}
+                        <button title="Renombrar" onClick={() => { const name = prompt('Nuevo nombre:', cat.name); if (name) updateCategory(cat.id, name); }} style={{ background: 'transparent', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', padding: '2px', display: 'flex', borderRadius: '4px' }}><Edit3 size={11} /></button>
+                        <button title="Eliminar" onClick={() => { if (confirm(`¿Eliminar categoría "${cat.name}"? Los productos quedarán en "otros".`)) deleteCategory(cat.id); }} style={{ background: 'transparent', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', padding: '2px', display: 'flex', borderRadius: '4px' }}><X size={11} /></button>
                     </div>
                 ))}
                 <button
@@ -450,69 +449,112 @@ function ProductTable({ menu, categories, selectedCategory, setSelectedCategory,
     );
 }
 
-function RecipeGrid({ menu, recipes, ingredients, onEdit }) {
+function RecipeGrid({ menu, recipes, ingredients, onEdit, onDelete }) {
     return (
         <div style={{ padding: '2rem', display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: '1.5rem' }}>
-            {menu.map(p => (
-                <div key={p.id} className="obsidian-card" style={{ padding: '1.5rem' }}>
-                    <h4 style={cardTitleStyle}>{p.name}</h4>
-                    <div style={cardContentStyle}>
-                        {recipes[p.id]?.map((comp, idx) => (
-                            <div key={idx} style={cardLineStyle}>
-                                <span>{ingredients.find(i => i.id === comp.ingredientId)?.name}</span>
-                                <span>{comp.quantity} {ingredients.find(i => i.id === comp.ingredientId)?.unit}</span>
-                            </div>
-                        ))}
-                        {(!recipes[p.id] || recipes[p.id].length === 0) && <p style={emptyCardTextStyle}>Sin receta configurada.</p>}
+            {menu.map(p => {
+                const hasRecipe = recipes[p.id] && recipes[p.id].length > 0;
+                return (
+                    <div key={p.id} className="obsidian-card" style={{ padding: '1.5rem' }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '0.75rem' }}>
+                            <h4 style={{ ...cardTitleStyle, marginBottom: 0 }}>{p.name}</h4>
+                            {hasRecipe && (
+                                <button
+                                    title="Eliminar receta"
+                                    onClick={() => { if (confirm(`¿Eliminar la receta de "${p.name}"?`)) onDelete(p.id); }}
+                                    style={{ background: 'transparent', border: 'none', color: '#ff4444', cursor: 'pointer', padding: '2px', display: 'flex' }}
+                                ><Trash2 size={14} /></button>
+                            )}
+                        </div>
+                        <div style={cardContentStyle}>
+                            {recipes[p.id]?.map((comp, idx) => (
+                                <div key={idx} style={cardLineStyle}>
+                                    <span>{ingredients.find(i => i.id === comp.ingredientId)?.name}</span>
+                                    <span>{comp.quantity} {ingredients.find(i => i.id === comp.ingredientId)?.unit}</span>
+                                </div>
+                            ))}
+                            {!hasRecipe && <p style={emptyCardTextStyle}>Sin receta configurada.</p>}
+                        </div>
+                        <button onClick={() => onEdit(p)} style={configButtonStyle}>CONFIGURAR RECETA</button>
                     </div>
-                    <button onClick={() => onEdit(p)} style={configButtonStyle}>CONFIGURAR RECETA</button>
-                </div>
-            ))}
+                );
+            })}
         </div>
     );
 }
 
-function ModifierGrid({ menu, modifiers, onEdit }) {
+function ModifierGrid({ menu, modifiers, onEdit, onClear }) {
     return (
         <div style={{ padding: '2rem', display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: '1.5rem' }}>
-            {menu.map(p => (
-                <div key={p.id} className="obsidian-card" style={{ padding: '1.5rem' }}>
-                    <h4 style={cardTitleStyle}>{p.name}</h4>
-                    <div style={cardContentStyle}>
-                        {modifiers[p.id]?.map((group, idx) => (
-                            <div key={idx} style={cardLineStyle}>
-                                <span>{group.name}</span>
-                                <span>{group.options.length} opciones</span>
-                            </div>
-                        ))}
-                        {(!modifiers[p.id] || modifiers[p.id].length === 0) && <p style={emptyCardTextStyle}>Sin modificadores.</p>}
+            {menu.map(p => {
+                const hasModifiers = modifiers[p.id] && modifiers[p.id].length > 0;
+                return (
+                    <div key={p.id} className="obsidian-card" style={{ padding: '1.5rem' }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '0.75rem' }}>
+                            <h4 style={{ ...cardTitleStyle, marginBottom: 0 }}>{p.name}</h4>
+                            {hasModifiers && (
+                                <button
+                                    title="Limpiar modificadores"
+                                    onClick={() => { if (confirm(`¿Eliminar todos los modificadores de "${p.name}"?`)) onClear(p); }}
+                                    style={{ background: 'transparent', border: 'none', color: '#ff4444', cursor: 'pointer', padding: '2px', display: 'flex' }}
+                                ><Trash2 size={14} /></button>
+                            )}
+                        </div>
+                        <div style={cardContentStyle}>
+                            {modifiers[p.id]?.map((group, idx) => (
+                                <div key={idx} style={cardLineStyle}>
+                                    <span>{group.name}</span>
+                                    <span>{group.options.length} opciones</span>
+                                </div>
+                            ))}
+                            {!hasModifiers && <p style={emptyCardTextStyle}>Sin modificadores.</p>}
+                        </div>
+                        <button onClick={() => onEdit(p)} style={configButtonStyle}>GESTIONAR OPCIONES</button>
                     </div>
-                    <button onClick={() => onEdit(p)} style={configButtonStyle}>GESTIONAR OPCIONES</button>
-                </div>
-            ))}
+                );
+            })}
         </div>
     );
 }
 
-function PriceListEditor({ menu, priceLists, priceOverrides, onUpdatePrice, onAddList }) {
+function PriceListEditor({ menu, priceLists, priceOverrides, activePriceListId, onUpdatePrice, onAddList, onDeleteList, onRenameList }) {
+    const PROTECTED = ['salon', 'delivery', 'mostrador'];
     const [selectedList, setSelectedList] = useState(priceLists[0]?.id || 'salon');
     const [search, setSearch] = useState('');
 
     return (
         <div style={{ padding: '2rem' }}>
-            <div style={{ display: 'flex', gap: '2rem', marginBottom: '2rem', alignItems: 'center' }}>
+            <div style={{ display: 'flex', gap: '2rem', marginBottom: '2rem', alignItems: 'flex-end', flexWrap: 'wrap' }}>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem' }}>
-                    <label style={labelStyle}>Lista de Precios Selecta</label>
-                    <select
-                        value={selectedList}
-                        onChange={e => setSelectedList(e.target.value)}
-                        style={{ ...inputStyle, width: '250px' }}
-                    >
-                        {priceLists.map(l => <option key={l.id} value={l.id}>{l.name} {l.isDefault ? '(Base)' : ''}</option>)}
-                    </select>
+                    <label style={labelStyle}>Lista de Precios Activa</label>
+                    <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
+                        {priceLists.map(l => {
+                            const isSelected = selectedList === l.id;
+                            const isProtected = PROTECTED.includes(l.id);
+                            const isActive = activePriceListId === l.id;
+                            return (
+                                <div key={l.id} style={{ display: 'flex', alignItems: 'center', gap: '2px' }}>
+                                    <button
+                                        onClick={() => setSelectedList(l.id)}
+                                        style={{
+                                            padding: '0.5rem 1rem', borderRadius: '20px', fontSize: '0.7rem', fontWeight: 800, cursor: 'pointer',
+                                            background: isSelected ? 'var(--fire-orange)' : 'rgba(255,255,255,0.05)',
+                                            color: isSelected ? 'black' : 'white', border: isActive ? '1px solid var(--fire-orange)' : 'none', whiteSpace: 'nowrap'
+                                        }}
+                                    >{l.name.toUpperCase()}{isActive ? ' ●' : ''}</button>
+                                    {!isProtected && (
+                                        <>
+                                            <button title="Renombrar" onClick={() => { const n = prompt('Nuevo nombre:', l.name); if (n) onRenameList(l.id, n); }} style={{ background: 'transparent', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', padding: '2px', display: 'flex', borderRadius: '4px' }}><Edit3 size={11} /></button>
+                                            <button title={isActive ? 'No se puede eliminar la lista activa' : 'Eliminar tarifa'} onClick={() => { if (isActive) { alert('No puedes eliminar la lista de precios activa.'); return; } if (confirm(`¿Eliminar la tarifa "${l.name}"?`)) { onDeleteList(l.id); if (selectedList === l.id) setSelectedList('salon'); } }} style={{ background: 'transparent', border: 'none', color: isActive ? 'var(--text-muted)' : '#ff4444', cursor: isActive ? 'not-allowed' : 'pointer', padding: '2px', display: 'flex', borderRadius: '4px', opacity: isActive ? 0.4 : 1 }}><X size={11} /></button>
+                                        </>
+                                    )}
+                                </div>
+                            );
+                        })}
+                    </div>
                 </div>
 
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem', flex: 1 }}>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem', flex: 1, minWidth: '200px' }}>
                     <label style={labelStyle}>Buscar por nombre</label>
                     <div className="obsidian-card" style={{ ...searchBoxStyle, width: '100%', maxWidth: '400px' }}>
                         <Search size={18} color="var(--text-muted)" />
@@ -528,11 +570,11 @@ function PriceListEditor({ menu, priceLists, priceOverrides, onUpdatePrice, onAd
 
                 <button
                     onClick={() => {
-                        const name = prompt('Nombre de la nueva lista (ej: Delivery, VIP, Especial):');
+                        const name = prompt('Nombre de la nueva lista (ej: VIP, Especial, Evento):');
                         if (name) onAddList(name);
                     }}
                     className="obsidian-card"
-                    style={{ marginTop: 'auto', padding: '1rem 1.5rem', background: 'rgba(255, 69, 0, 0.1)', border: '1px solid var(--fire-orange)', color: 'var(--fire-orange)', cursor: 'pointer', fontWeight: 800, fontSize: '0.7rem' }}
+                    style={{ padding: '1rem 1.5rem', background: 'rgba(255, 69, 0, 0.1)', border: '1px solid var(--fire-orange)', color: 'var(--fire-orange)', cursor: 'pointer', fontWeight: 800, fontSize: '0.7rem' }}
                 >+ CREAR NUEVA TARIFA</button>
             </div>
 
@@ -596,7 +638,7 @@ function ManagementModal({ type, item, ctx, onClose, onSave }) {
     const [formData, setFormData] = useState(item || (
         type === 'recipe' ? { ingredientsList: [] } :
             type === 'modifiers' ? { groups: [] } :
-                type === 'ingredients' ? { name: '', unit: 'u', costPerUnit: 0, currentStock: 0, minStock: 0 } :
+                type === 'ingredients' ? { name: '', unit: 'u', costPerUnit: 0, currentStock: 0, minStock: 0, category: ctx.ingredientCategories?.[0]?.id || '' } :
                     (type === 'adjust' || type === 'adjust_product' || type === 'quick_adjust') ? { qty: 0, note: '', type: 'waste', selectedItem: null } :
                         { name: '', price: 0, category: ctx.categories[0]?.id || '', stock: 0 }
     ));
@@ -632,6 +674,12 @@ function ManagementModal({ type, item, ctx, onClose, onSave }) {
             <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem' }}>
                 <label style={labelStyle}>Nombre del Insumo</label>
                 <input placeholder="Nombre" value={formData.name || ''} onChange={e => setFormData({ ...formData, name: e.target.value })} style={inputStyle} />
+            </div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem' }}>
+                <label style={labelStyle}>Categoría</label>
+                <select value={formData.category || ctx.ingredientCategories?.[0]?.id || ''} onChange={e => setFormData({ ...formData, category: e.target.value })} style={inputStyle}>
+                    {(ctx.ingredientCategories || []).map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+                </select>
             </div>
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem' }}>

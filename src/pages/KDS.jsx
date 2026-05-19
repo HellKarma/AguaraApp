@@ -1,9 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import { useAguaraStore } from '../store/aguaraStore';
-import { Clock, CheckCircle2, Flame, Utensils, History, ChevronLeft } from 'lucide-react';
+import { Clock, CheckCircle2, Flame, Utensils, History, ChevronLeft, RotateCcw } from 'lucide-react';
 
 export default function KDS() {
-    const { kitchenQueue, tables, removeFromKitchen, orderHistory } = useAguaraStore();
+    const { kitchenQueue, tables, removeFromKitchen, revertKitchenItem, kitchenHistory } = useAguaraStore();
     const [view, setView] = useState('live'); // 'live' or 'history'
 
     const getTableById = (id) => tables.find(t => t.id === Number(id));
@@ -69,6 +69,7 @@ export default function KDS() {
                                             key={`${tableId}-${idx}`}
                                             item={item}
                                             onFinish={() => removeFromKitchen(tableId, idx)}
+                                            onRevert={() => revertKitchenItem(tableId, idx)}
                                         />
                                     ))}
                                 </div>
@@ -90,8 +91,8 @@ export default function KDS() {
                             </tr>
                         </thead>
                         <tbody>
-                            {orderHistory.map((entry, idx) => (
-                                <tr key={idx} style={{ borderBottom: '1px solid rgba(255,255,255,0.02)' }}>
+                            {kitchenHistory.map((entry, idx) => (
+                                <tr key={entry.id || idx} style={{ borderBottom: '1px solid rgba(255,255,255,0.02)' }}>
                                     <td style={{ padding: '1.2rem 1.5rem', fontWeight: 700 }}>{entry.tableName}</td>
                                     <td style={{ padding: '1.2rem 1.5rem' }}>{entry.quantity}x {entry.name}</td>
                                     <td style={{ padding: '1.2rem 1.5rem', opacity: 0.6 }}>{new Date(entry.startTime).toLocaleTimeString()}</td>
@@ -114,7 +115,7 @@ export default function KDS() {
                                     </td>
                                 </tr>
                             ))}
-                            {orderHistory.length === 0 && (
+                            {kitchenHistory.length === 0 && (
                                 <tr>
                                     <td colSpan="5" style={{ padding: '4rem', textAlign: 'center', opacity: 0.3 }}>Aún no hay historia en este turno.</td>
                                 </tr>
@@ -127,7 +128,7 @@ export default function KDS() {
     );
 }
 
-function KitchenItemCard({ item, onFinish }) {
+function KitchenItemCard({ item, onFinish, onRevert }) {
     const [elapsed, setElapsed] = useState(0);
 
     useEffect(() => {
@@ -144,40 +145,73 @@ function KitchenItemCard({ item, onFinish }) {
         return `${m}:${s < 10 ? '0' : ''}${s}`;
     };
 
-    const isLate = elapsed > 900; // 15 mins
+    const LATE_THRESHOLD = 900; // 15 min
+    const isLate = elapsed > LATE_THRESHOLD;
+    const isWarning = elapsed > LATE_THRESHOLD / 2; // 7.5 min — advertencia suave
+
+    const timeBadgeStyle = {
+        display: 'inline-flex', alignItems: 'center', gap: '0.3rem',
+        padding: '0.2rem 0.5rem', borderRadius: '4px', fontSize: '0.75rem', fontWeight: 800,
+        background: isLate ? 'rgba(212, 32, 0, 0.25)' : isWarning ? 'rgba(255, 140, 0, 0.15)' : 'rgba(255,255,255,0.05)',
+        color: isLate ? 'var(--fire-red)' : isWarning ? 'var(--amber-warm)' : 'var(--text-muted)',
+    };
 
     return (
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '1.25rem' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
+        <div
+            className={isLate ? 'obsidian-card kds-late' : 'obsidian-card'}
+            style={{
+                display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                marginBottom: '0.75rem', padding: '0.75rem 1rem',
+                background: isLate ? 'rgba(212, 32, 0, 0.05)' : 'rgba(255,255,255,0.02)',
+                border: `1px solid ${isLate ? 'var(--fire-red)' : 'rgba(255,255,255,0.05)'}`,
+                transition: 'background 0.5s, border-color 0.5s'
+            }}
+        >
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
                 <div style={{
-                    width: '32px', height: '32px', borderRadius: '4px',
-                    background: 'rgba(255, 69, 0, 0.1)', display: 'flex',
-                    alignItems: 'center', justifyContent: 'center',
-                    fontWeight: 900, color: 'var(--fire-orange)'
+                    width: '32px', height: '32px', borderRadius: '4px', flexShrink: 0,
+                    background: isLate ? 'rgba(212, 32, 0, 0.2)' : 'rgba(255, 69, 0, 0.1)',
+                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    fontWeight: 900, color: isLate ? 'var(--fire-red)' : 'var(--fire-orange)'
                 }}>
                     {item.quantity || 1}
                 </div>
-                <div style={{ display: 'flex', flexDirection: 'column' }}>
-                    <span style={{ fontWeight: 600, fontSize: '1.1rem' }}>{item.name}</span>
-                    <span style={{
-                        fontSize: '0.75rem',
-                        color: isLate ? 'var(--fire-orange)' : 'var(--text-muted)',
-                        fontWeight: isLate ? 800 : 400,
-                        display: 'flex', alignItems: 'center', gap: '0.4rem'
-                    }}>
-                        <Clock size={12} /> {formatTime(elapsed)}
-                    </span>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.25rem' }}>
+                    <span style={{ fontWeight: 600, fontSize: '1rem' }}>{item.name}</span>
+                    {item.selectedModifiers?.length > 0 && (
+                        <span style={{ fontSize: '0.65rem', opacity: 0.5, fontStyle: 'italic' }}>
+                            {item.selectedModifiers.map(m => m.name).join(', ')}
+                        </span>
+                    )}
                 </div>
             </div>
-            <button
-                onClick={onFinish}
-                style={{
-                    background: 'rgba(34, 197, 94, 0.1)', border: '1px solid #22c55e',
-                    color: '#22c55e', borderRadius: '4px', padding: '0.4rem', cursor: 'pointer'
-                }}
-            >
-                <CheckCircle2 size={18} />
-            </button>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', flexShrink: 0 }}>
+                <span style={timeBadgeStyle}>
+                    <Clock size={11} /> {formatTime(elapsed)}
+                    {isLate && ' ⚠'}
+                </span>
+                <button
+                    title="Revertir a pendiente"
+                    onClick={onRevert}
+                    style={{
+                        background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.1)',
+                        color: 'var(--text-muted)', borderRadius: '4px', padding: '0.4rem', cursor: 'pointer',
+                        display: 'flex', alignItems: 'center'
+                    }}
+                >
+                    <RotateCcw size={16} />
+                </button>
+                <button
+                    onClick={onFinish}
+                    style={{
+                        background: 'rgba(34, 197, 94, 0.1)', border: '1px solid #22c55e',
+                        color: '#22c55e', borderRadius: '4px', padding: '0.4rem', cursor: 'pointer',
+                        display: 'flex', alignItems: 'center'
+                    }}
+                >
+                    <CheckCircle2 size={18} />
+                </button>
+            </div>
         </div>
     );
 }

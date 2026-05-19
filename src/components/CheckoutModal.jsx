@@ -3,12 +3,14 @@ import { useAguaraStore } from '../store/aguaraStore';
 import { X, CreditCard, Banknote, Receipt, CheckCircle, Sparkles, UserPlus, Users, Calculator, Smartphone, ArrowRight, MoreHorizontal } from 'lucide-react';
 
 export function CheckoutModal({ table, order, onClose }) {
-    const { setTableStatus, removeOrder, selectedCustomerId, getCustomerDiscount, customers } = useAguaraStore();
+    const { setTableStatus, removeOrder, selectedCustomerId, getCustomerDiscount, customers, cashRegister } = useAguaraStore();
+    const cajaOpen = cashRegister.isOpen;
     const [step, setStep] = useState('summary'); // summary, split, payment, success
     const [paymentMethod, setPaymentMethod] = useState(null);
     const [customPaymentDetail, setCustomPaymentDetail] = useState('');
     const [splitCount, setSplitCount] = useState(1);
     const [currentPayer, setCurrentPayer] = useState(1);
+    const [payments, setPayments] = useState([]);
 
     const subtotal = order.reduce((acc, item) => acc + (item.price * item.quantity), 0);
     const customerId = selectedCustomerId[table.id];
@@ -18,13 +20,15 @@ export function CheckoutModal({ table, order, onClose }) {
     const amountPerPerson = Math.ceil(total / splitCount);
 
     const handleFinish = () => {
+        const newPayments = [...payments, { amount: amountPerPerson, method: paymentMethod }];
         if (currentPayer < splitCount) {
+            setPayments(newPayments);
             setCurrentPayer(curr => curr + 1);
             setStep('summary');
             setPaymentMethod(null);
         } else {
             setTableStatus(table.id, 'available');
-            removeOrder(table.id, { method: paymentMethod, tableName: table.name });
+            removeOrder(table.id, { payments: newPayments, tableName: table.name });
             setStep('success');
         }
     };
@@ -113,6 +117,11 @@ export function CheckoutModal({ table, order, onClose }) {
                                 </div>
                             )}
 
+                            {!cajaOpen && (
+                                <div style={{ marginBottom: '1rem', padding: '0.75rem 1rem', background: 'rgba(212,32,0,0.1)', border: '1px solid var(--fire-red)', borderRadius: '6px', fontSize: '0.8rem', color: 'var(--fire-orange)', fontWeight: 700 }}>
+                                    ⚠ Abrí la caja antes de registrar ventas.
+                                </div>
+                            )}
                             <div style={{ display: 'flex', gap: '0.75rem' }}>
                                 <button
                                     onClick={() => setStep('split')}
@@ -122,10 +131,10 @@ export function CheckoutModal({ table, order, onClose }) {
                                     <Users size={16} /> DIVIDIR
                                 </button>
                                 <button
-                                    disabled={!paymentMethod}
+                                    disabled={!paymentMethod || !cajaOpen}
                                     onClick={() => setStep('payment')}
                                     className="primary-button"
-                                    style={{ flex: 2, opacity: paymentMethod ? 1 : 0.5, padding: '0.75rem', fontSize: '0.8rem' }}
+                                    style={{ flex: 2, opacity: (paymentMethod && cajaOpen) ? 1 : 0.5, padding: '0.75rem', fontSize: '0.8rem', cursor: !cajaOpen ? 'not-allowed' : 'pointer' }}
                                 >
                                     PROCESAR PAGO
                                 </button>

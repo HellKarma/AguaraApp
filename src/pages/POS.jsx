@@ -1,6 +1,6 @@
-import React, { useState } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { useAguaraStore } from '../store/aguaraStore';
-import { User, DollarSign, Clock, Check, Truck, Wallet, CreditCard, ArrowRight, AlertCircle, Package, Smartphone, CheckCircle2 } from 'lucide-react';
+import { User, DollarSign, Clock, Check, Truck, Wallet, CreditCard, ArrowRight, AlertCircle, Package, Smartphone, CheckCircle2, Plus, Trash2, X, Edit3, Pencil } from 'lucide-react';
 import { OrderDrawer } from '../components/OrderDrawer';
 import { CheckoutModal } from '../components/CheckoutModal';
 
@@ -8,12 +8,65 @@ export default function POS() {
     const {
         tables, setTableStatus, activeOrders, activePriceListId,
         priceLists, setActivePriceList, addItemToOrder,
-        deliveryMetadata, updateDeliveryMetadata, removeOrder
+        deliveryMetadata, updateDeliveryMetadata, removeOrder,
+        addTable, deleteTable, updateTable, persistTable, fetchTables, fetchActiveOrders
     } = useAguaraStore();
     const [selectedTable, setSelectedTable] = useState(null);
+
+    useEffect(() => {
+        fetchTables();
+        fetchActiveOrders();
+    }, []);
     const [checkoutTable, setCheckoutTable] = useState(null);
+    const [tableModal, setTableModal] = useState(false);
+    const [newTableForm, setNewTableForm] = useState({ name: '', shape: 'square' });
+    const [editMode, setEditMode] = useState(false);
+    const containerRef = useRef(null);
+    const dragRef = useRef(null);
 
     const isDeliveryMode = activePriceListId === 'delivery' || activePriceListId === 'mostrador';
+
+    const startDrag = (e, tableId) => {
+        e.preventDefault();
+        e.currentTarget.setPointerCapture(e.pointerId);
+        const table = tables.find(t => t.id === tableId);
+        dragRef.current = { tableId, startX: e.clientX, startY: e.clientY, startPosX: table.position.x, startPosY: table.position.y };
+    };
+
+    const handlePointerMove = (e) => {
+        if (!dragRef.current || !containerRef.current) return;
+        const rect = containerRef.current.getBoundingClientRect();
+        const dx = ((e.clientX - dragRef.current.startX) / rect.width) * 100;
+        const dy = ((e.clientY - dragRef.current.startY) / rect.height) * 100;
+        updateTable(dragRef.current.tableId, {
+            position: {
+                x: Math.max(0, Math.min(85, dragRef.current.startPosX + dx)),
+                y: Math.max(0, Math.min(85, dragRef.current.startPosY + dy))
+            }
+        });
+    };
+
+    const handlePointerUp = () => {
+        if (dragRef.current) persistTable(dragRef.current.tableId);
+        dragRef.current = null;
+    };
+
+    const cycleShape = (e, table) => {
+        e.stopPropagation();
+        const shapes = ['square', 'round', 'rect'];
+        const newShape = shapes[(shapes.indexOf(table.shape) + 1) % shapes.length];
+        updateTable(table.id, { shape: newShape });
+        persistTable(table.id);
+    };
+
+    const renameTable = (e, table) => {
+        e.stopPropagation();
+        const name = prompt('Nuevo nombre:', table.name);
+        if (name && name.trim()) {
+            updateTable(table.id, { name: name.trim() });
+            persistTable(table.id);
+        }
+    };
 
     const getStatusColor = (status) => {
         switch (status) {
@@ -57,10 +110,31 @@ export default function POS() {
                         </select>
                     </div>
                     {!isDeliveryMode && (
-                        <div className="obsidian-card" style={{ padding: '1rem 2rem', display: 'flex', gap: '2rem', height: 'fit-content' }}>
-                            <LegendItem color="rgba(255,255,255,0.05)" label="Libre" />
-                            <LegendItem color="var(--fire-orange)" label="Ocupada" glow />
-                            <LegendItem color="var(--amber-warm)" label="Pagando" glow />
+                        <div style={{ display: 'flex', gap: '1rem', alignItems: 'center' }}>
+                            <div className="obsidian-card" style={{ padding: '1rem 2rem', display: 'flex', gap: '2rem', height: 'fit-content' }}>
+                                <LegendItem color="rgba(255,255,255,0.05)" label="Libre" />
+                                <LegendItem color="var(--fire-orange)" label="Ocupada" glow />
+                                <LegendItem color="var(--amber-warm)" label="Pagando" glow />
+                            </div>
+                            <button
+                                onClick={() => setEditMode(m => !m)}
+                                style={{
+                                    padding: '0.75rem 1.25rem', display: 'flex', alignItems: 'center', gap: '0.5rem',
+                                    fontSize: '0.8rem', fontWeight: 800, cursor: 'pointer', borderRadius: '8px',
+                                    background: editMode ? 'rgba(255,69,0,0.15)' : 'rgba(255,255,255,0.05)',
+                                    border: `1px solid ${editMode ? 'var(--fire-orange)' : 'rgba(255,255,255,0.15)'}`,
+                                    color: editMode ? 'var(--fire-orange)' : 'var(--text-muted)'
+                                }}
+                            >
+                                <Edit3 size={16} /> {editMode ? 'LISTO' : 'EDITAR'}
+                            </button>
+                            <button
+                                onClick={() => { setNewTableForm({ name: '', shape: 'square' }); setTableModal(true); }}
+                                className="primary-button"
+                                style={{ padding: '0.75rem 1.25rem', display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '0.8rem' }}
+                            >
+                                <Plus size={16} /> NUEVA MESA
+                            </button>
                         </div>
                     )}
                     {isDeliveryMode && (
@@ -78,14 +152,21 @@ export default function POS() {
             {/* View Switcher Content */}
             {!isDeliveryMode ? (
                 /* Interactive Floor Plan */
-                <div className="obsidian-card" style={{
-                    width: '100%',
-                    height: '600px',
-                    position: 'relative',
-                    background: 'rgba(255,255,255,0.01)',
-                    overflow: 'hidden',
-                    border: '1px solid rgba(255,255,255,0.02)'
-                }}>
+                <div
+                    ref={containerRef}
+                    className="obsidian-card"
+                    onPointerMove={handlePointerMove}
+                    onPointerUp={handlePointerUp}
+                    style={{
+                        width: '100%',
+                        height: '600px',
+                        position: 'relative',
+                        background: 'rgba(255,255,255,0.01)',
+                        overflow: 'hidden',
+                        border: `1px solid ${editMode ? 'rgba(255,69,0,0.3)' : 'rgba(255,255,255,0.02)'}`,
+                        transition: 'border-color 0.3s'
+                    }}
+                >
                     <div style={{
                         position: 'absolute',
                         inset: 0,
@@ -94,49 +175,75 @@ export default function POS() {
                         pointerEvents: 'none'
                     }} />
 
+                    {editMode && (
+                        <div style={{ position: 'absolute', top: '0.75rem', left: '50%', transform: 'translateX(-50%)', background: 'rgba(255,69,0,0.12)', border: '1px solid rgba(255,69,0,0.3)', borderRadius: '20px', padding: '0.3rem 1rem', fontSize: '0.65rem', color: 'var(--fire-orange)', fontWeight: 800, letterSpacing: '0.05rem', pointerEvents: 'none' }}>
+                            MODO EDICIÓN — ARRASTRÁ PARA MOVER
+                        </div>
+                    )}
+
                     {tables.map(table => (
                         <div
                             key={table.id}
-                            onClick={() => {
-                                if (table.status === 'available') {
-                                    setTableStatus(table.id, 'occupied');
-                                } else if (table.status === 'paying') {
-                                    setCheckoutTable(table);
-                                } else {
-                                    setSelectedTable(table);
-                                }
-                            }}
-                            className="obsidian-card table-item"
-                            style={{
-                                position: 'absolute',
-                                left: `${table.position.x}%`,
-                                top: `${table.position.y}%`,
-                                width: table.shape === 'rect' ? '120px' : '80px',
-                                height: '80px',
-                                cursor: 'pointer',
-                                display: 'flex',
-                                flexDirection: 'column',
-                                alignItems: 'center',
-                                justifyContent: 'center',
-                                gap: '0.25rem',
-                                backgroundColor: getStatusColor(table.status),
-                                borderColor: table.status !== 'available' ? 'var(--fire-orange)' : 'rgba(255,255,255,0.1)',
-                                boxShadow: table.status !== 'available' ? '0 0 20px rgba(255, 69, 0, 0.3)' : 'var(--shadow-carved)',
-                                transition: 'all 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275)',
-                                borderRadius: table.shape === 'round' ? '50%' : 'var(--radius-tribal)',
-                                padding: '0'
-                            }}
+                            style={{ position: 'absolute', left: `${table.position.x}%`, top: `${table.position.y}%` }}
                         >
-                            <span style={{
-                                fontSize: '0.8rem',
-                                fontWeight: 800,
-                                color: table.status === 'available' ? 'var(--text-muted)' : 'white',
-                                textShadow: table.status !== 'available' ? '0 2px 4px rgba(0,0,0,0.5)' : 'none'
-                            }}>
-                                {table.name}
-                            </span>
-                            {table.status === 'occupied' && <User size={14} color="white" />}
-                            {table.status === 'paying' && <DollarSign size={14} color="white" />}
+                            {editMode && (
+                                <div style={{ display: 'flex', gap: '4px', marginBottom: '4px', justifyContent: 'center' }}>
+                                    <button
+                                        onClick={(e) => renameTable(e, table)}
+                                        title="Renombrar"
+                                        style={{ background: 'rgba(255,255,255,0.1)', border: '1px solid rgba(255,255,255,0.2)', color: 'white', borderRadius: '4px', padding: '3px 6px', cursor: 'pointer', display: 'flex', alignItems: 'center' }}
+                                    ><Pencil size={11} /></button>
+                                    <button
+                                        onClick={(e) => cycleShape(e, table)}
+                                        title="Cambiar forma"
+                                        style={{ background: 'rgba(255,255,255,0.1)', border: '1px solid rgba(255,255,255,0.2)', color: 'white', borderRadius: '4px', padding: '3px 6px', cursor: 'pointer', fontSize: '10px', fontWeight: 800 }}
+                                    >{table.shape === 'round' ? '○' : table.shape === 'rect' ? '▬' : '□'}</button>
+                                    <button
+                                        onClick={(e) => { e.stopPropagation(); if (window.confirm(`¿Eliminar ${table.name}?`)) deleteTable(table.id); }}
+                                        title="Eliminar"
+                                        style={{ background: 'rgba(212,32,0,0.2)', border: '1px solid var(--fire-red)', color: 'var(--fire-red)', borderRadius: '4px', padding: '3px 6px', cursor: 'pointer', display: 'flex', alignItems: 'center' }}
+                                    ><Trash2 size={11} /></button>
+                                </div>
+                            )}
+                            <div
+                                onPointerDown={editMode ? (e) => startDrag(e, table.id) : undefined}
+                                onClick={() => {
+                                    if (editMode) return;
+                                    if (table.status === 'available') setTableStatus(table.id, 'occupied');
+                                    else if (table.status === 'paying') setCheckoutTable(table);
+                                    else setSelectedTable(table);
+                                }}
+                                className="obsidian-card table-item"
+                                style={{
+                                    width: table.shape === 'rect' ? '120px' : '80px',
+                                    height: '80px',
+                                    cursor: editMode ? 'grab' : 'pointer',
+                                    display: 'flex',
+                                    flexDirection: 'column',
+                                    alignItems: 'center',
+                                    justifyContent: 'center',
+                                    gap: '0.25rem',
+                                    backgroundColor: editMode ? 'rgba(255,69,0,0.07)' : getStatusColor(table.status),
+                                    borderColor: editMode ? 'rgba(255,69,0,0.4)' : (table.status !== 'available' ? 'var(--fire-orange)' : 'rgba(255,255,255,0.1)'),
+                                    boxShadow: table.status !== 'available' && !editMode ? '0 0 20px rgba(255, 69, 0, 0.3)' : 'var(--shadow-carved)',
+                                    transition: 'all 0.3s',
+                                    borderRadius: table.shape === 'round' ? '50%' : 'var(--radius-tribal)',
+                                    padding: '0',
+                                    position: 'relative',
+                                    userSelect: 'none'
+                                }}
+                            >
+                                <span style={{
+                                    fontSize: '0.8rem',
+                                    fontWeight: 800,
+                                    color: (table.status === 'available' || editMode) ? 'var(--text-muted)' : 'white',
+                                    textShadow: table.status !== 'available' && !editMode ? '0 2px 4px rgba(0,0,0,0.5)' : 'none'
+                                }}>
+                                    {table.name}
+                                </span>
+                                {!editMode && table.status === 'occupied' && <User size={14} color="white" />}
+                                {!editMode && table.status === 'paying' && <DollarSign size={14} color="white" />}
+                            </div>
                         </div>
                     ))}
                 </div>
@@ -280,6 +387,63 @@ export default function POS() {
                     order={activeOrders[checkoutTable.id] || []}
                     onClose={() => setCheckoutTable(null)}
                 />
+            )}
+
+            {tableModal && (
+                <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.85)', backdropFilter: 'blur(10px)', zIndex: 1100, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                    <div className="obsidian-card" style={{ width: '380px', padding: '2rem', border: '1px solid var(--fire-orange)' }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem' }}>
+                            <h3 className="font-serif" style={{ fontSize: '1.5rem' }}>Nueva Mesa</h3>
+                            <button onClick={() => setTableModal(false)} style={{ background: 'transparent', border: 'none', color: 'white', cursor: 'pointer' }}><X size={20} /></button>
+                        </div>
+
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
+                            <div>
+                                <label style={{ fontSize: '0.65rem', color: 'var(--text-muted)', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.05rem', display: 'block', marginBottom: '0.5rem' }}>Nombre</label>
+                                <input
+                                    type="text"
+                                    placeholder="Ej: Mesa 7, Terraza 1..."
+                                    value={newTableForm.name}
+                                    onChange={e => setNewTableForm(f => ({ ...f, name: e.target.value }))}
+                                    style={{ width: '100%', padding: '0.75rem', background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '4px', color: 'white', fontSize: '0.9rem', boxSizing: 'border-box' }}
+                                    autoFocus
+                                />
+                            </div>
+
+                            <div>
+                                <label style={{ fontSize: '0.65rem', color: 'var(--text-muted)', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.05rem', display: 'block', marginBottom: '0.5rem' }}>Forma</label>
+                                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '0.5rem' }}>
+                                    {[{ id: 'round', label: 'Redonda' }, { id: 'square', label: 'Cuadrada' }, { id: 'rect', label: 'Rectangular' }].map(s => (
+                                        <button
+                                            key={s.id}
+                                            onClick={() => setNewTableForm(f => ({ ...f, shape: s.id }))}
+                                            className="obsidian-card"
+                                            style={{
+                                                padding: '0.75rem', border: `1px solid ${newTableForm.shape === s.id ? 'var(--fire-orange)' : 'rgba(255,255,255,0.05)'}`,
+                                                background: newTableForm.shape === s.id ? 'rgba(255,69,0,0.1)' : 'transparent',
+                                                color: 'white', cursor: 'pointer', fontSize: '0.75rem', fontWeight: 700
+                                            }}
+                                        >
+                                            {s.label}
+                                        </button>
+                                    ))}
+                                </div>
+                            </div>
+
+                            <button
+                                disabled={!newTableForm.name.trim()}
+                                onClick={() => {
+                                    addTable(newTableForm);
+                                    setTableModal(false);
+                                }}
+                                className="primary-button"
+                                style={{ padding: '1rem', opacity: newTableForm.name.trim() ? 1 : 0.5, marginTop: '0.5rem' }}
+                            >
+                                AGREGAR MESA
+                            </button>
+                        </div>
+                    </div>
+                </div>
             )}
 
             <div style={{ marginTop: '2rem', textAlign: 'right' }}>

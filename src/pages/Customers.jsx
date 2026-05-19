@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import {
     Users,
     Search,
@@ -23,7 +23,10 @@ import {
 import { useAguaraStore } from '../store/aguaraStore';
 
 function Customers() {
-    const { customers, addCustomer, updateCustomer, removeCustomer, vipConfig, updateVipConfig, orderHistory } = useAguaraStore();
+    const { customers, addCustomer, updateCustomer, removeCustomer, fetchCustomers, vipConfig, updateVipConfig, orderHistory } = useAguaraStore();
+
+    useEffect(() => { fetchCustomers(); }, []);
+
     const [activeTab, setActiveTab] = useState('list');
     const [searchTerm, setSearchTerm] = useState('');
     const [showAddForm, setShowAddForm] = useState(false);

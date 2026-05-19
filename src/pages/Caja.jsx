@@ -13,13 +13,16 @@ import {
     Smartphone,
     CreditCard,
     ArrowRight,
-    MoreHorizontal,
-    FileText
+    FileText,
+    Trash2,
+    ChevronDown,
+    ChevronRight
 } from 'lucide-react';
 import { useAguaraStore } from '../store/aguaraStore';
 
 function Caja() {
-    const { cashRegister, openShift, closeShift, addCashMovement } = useAguaraStore();
+    const { cashRegister, shiftHistory, openShift, closeShift, addCashMovement, deleteCashMovement } = useAguaraStore();
+    const [shiftHistoryOpen, setShiftHistoryOpen] = useState(false);
     const [openingAmount, setOpeningAmount] = useState('');
     const [movementModal, setMovementModal] = useState(null); // 'income' | 'expense'
     const [movementAmount, setMovementAmount] = useState('');
@@ -120,10 +123,10 @@ function Caja() {
 
             {/* Metrics Grid */}
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '1.5rem', marginBottom: '3rem' }}>
-                <MetricCard label="Efectivo en Caja" value={`$${cashRegister.currentBalance}`} icon={<Wallet size={20} color="var(--fire-orange)" />} />
-                <MetricCard label="Ventas Totales" value={`$${salesTotal}`} icon={<TrendingUp size={20} color="#22c55e" />} highlight />
-                <MetricCard label="Otros Ingresos" value={`$${incomesTotal}`} icon={<PlusCircle size={20} color="#22c55e" />} />
-                <MetricCard label="Egresos / Gastos" value={`$${expensesTotal}`} icon={<MinusCircle size={20} color="var(--fire-red)" />} />
+                <MetricCard label="Efectivo en Caja" value={`$${cashRegister.currentBalance.toLocaleString()}`} icon={<Wallet size={20} color="var(--fire-orange)" />} />
+                <MetricCard label="Facturación Total" value={`$${(cashRegister.totalRevenue || 0).toLocaleString()}`} icon={<TrendingUp size={20} color="#22c55e" />} highlight />
+                <MetricCard label="Otros Ingresos" value={`$${incomesTotal.toLocaleString()}`} icon={<PlusCircle size={20} color="#22c55e" />} />
+                <MetricCard label="Egresos / Gastos" value={`$${expensesTotal.toLocaleString()}`} icon={<MinusCircle size={20} color="var(--fire-red)" />} />
             </div>
 
             {/* Actions & History */}
@@ -153,9 +156,9 @@ function Caja() {
                     <div style={{ marginTop: '3rem', padding: '1.5rem', background: 'rgba(255,255,255,0.02)', borderRadius: '12px', border: '1px solid rgba(255,255,255,0.05)' }}>
                         <h4 style={{ fontSize: '0.75rem', fontWeight: 900, color: 'var(--text-muted)', textTransform: 'uppercase', marginBottom: '1rem' }}>Resumen por Medio</h4>
                         <SummaryRow label="Efectivo" value={cashRegister.logs.filter(l => l.method === 'cash').reduce((acc, l) => acc + (l.type === 'expense' ? -l.amount : l.amount), 0)} icon={<Wallet size={14} />} />
-                        <SummaryRow label="Tarjeta" value={cashRegister.logs.filter(l => l.method === 'card').reduce((acc, l) => acc + l.amount, 0)} icon={<CreditCard size={14} />} />
-                        <SummaryRow label="Mercado Pago" value={cashRegister.logs.filter(l => l.method === 'mp').reduce((acc, l) => acc + l.amount, 0)} icon={<Smartphone size={14} />} />
-                        <SummaryRow label="Transferencia" value={cashRegister.logs.filter(l => l.method === 'transfer').reduce((acc, l) => acc + l.amount, 0)} icon={<ArrowRight size={14} />} />
+                        <SummaryRow label="Tarjeta" value={cashRegister.logs.filter(l => l.method === 'card').reduce((acc, l) => acc + (l.type === 'expense' ? -l.amount : l.amount), 0)} icon={<CreditCard size={14} />} />
+                        <SummaryRow label="Mercado Pago" value={cashRegister.logs.filter(l => l.method === 'mp').reduce((acc, l) => acc + (l.type === 'expense' ? -l.amount : l.amount), 0)} icon={<Smartphone size={14} />} />
+                        <SummaryRow label="Transferencia" value={cashRegister.logs.filter(l => l.method === 'transfer').reduce((acc, l) => acc + (l.type === 'expense' ? -l.amount : l.amount), 0)} icon={<ArrowRight size={14} />} />
                     </div>
                 </div>
 
@@ -174,6 +177,7 @@ function Caja() {
                                     <th style={{ padding: '1rem 0.5rem', fontSize: '0.7rem', color: 'var(--text-muted)', fontWeight: 800 }}>CONCEPTO</th>
                                     <th style={{ padding: '1rem 0.5rem', fontSize: '0.7rem', color: 'var(--text-muted)', fontWeight: 800 }}>MEDIO</th>
                                     <th style={{ padding: '1rem 0.5rem', fontSize: '0.7rem', color: 'var(--text-muted)', fontWeight: 800, textAlign: 'right' }}>MONTO</th>
+                                    <th style={{ padding: '1rem 0.5rem', width: '40px' }}></th>
                                 </tr>
                             </thead>
                             <tbody>
@@ -194,7 +198,18 @@ function Caja() {
                                             </span>
                                         </td>
                                         <td style={{ padding: '1rem 0.5rem', textAlign: 'right', fontWeight: 800, color: log.type === 'expense' ? 'var(--fire-red)' : (log.type === 'sale' || log.type === 'income' ? '#22c55e' : 'white') }}>
-                                            {log.type === 'expense' ? '-' : ''}${log.amount}
+                                            {log.type === 'expense' ? '-' : ''}${log.amount.toLocaleString()}
+                                        </td>
+                                        <td style={{ padding: '0.5rem' }}>
+                                            {(log.type === 'income' || log.type === 'expense') && (
+                                                <button
+                                                    title="Eliminar movimiento"
+                                                    onClick={() => { if (confirm('¿Eliminar este movimiento?')) deleteCashMovement(log.id); }}
+                                                    style={{ background: 'transparent', border: 'none', color: 'rgba(255,68,68,0.4)', cursor: 'pointer', display: 'flex', padding: '4px', borderRadius: '4px', transition: 'color 0.2s' }}
+                                                    onMouseEnter={e => e.currentTarget.style.color = '#ff4444'}
+                                                    onMouseLeave={e => e.currentTarget.style.color = 'rgba(255,68,68,0.4)'}
+                                                ><Trash2 size={14} /></button>
+                                            )}
                                         </td>
                                     </tr>
                                 ))}
@@ -209,6 +224,47 @@ function Caja() {
                     </div>
                 </div>
             </div>
+
+            {/* Shift History */}
+            {shiftHistory.length > 0 && (
+                <div className="obsidian-card" style={{ marginTop: '2rem', padding: '2rem' }}>
+                    <button
+                        onClick={() => setShiftHistoryOpen(v => !v)}
+                        style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', background: 'transparent', border: 'none', color: 'white', cursor: 'pointer', padding: 0, width: '100%' }}
+                    >
+                        {shiftHistoryOpen ? <ChevronDown size={18} color="var(--fire-orange)" /> : <ChevronRight size={18} color="var(--fire-orange)" />}
+                        <h3 className="font-serif" style={{ fontSize: '1.25rem' }}>Turnos Anteriores</h3>
+                        <span style={{ fontSize: '0.65rem', background: 'rgba(255,69,0,0.15)', color: 'var(--fire-orange)', padding: '0.2rem 0.6rem', borderRadius: '20px', fontWeight: 800 }}>{shiftHistory.length}</span>
+                    </button>
+                    {shiftHistoryOpen && (
+                        <div style={{ marginTop: '1.5rem', display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+                            {shiftHistory.map(shift => (
+                                <div key={shift.id} style={{ padding: '1.25rem', background: 'rgba(255,255,255,0.02)', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.05)' }}>
+                                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.75rem' }}>
+                                        <div>
+                                            <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)', fontWeight: 800, textTransform: 'uppercase' }}>
+                                                {new Date(shift.openDate).toLocaleDateString('es-AR', { weekday: 'long', day: 'numeric', month: 'long' })}
+                                            </p>
+                                            <p style={{ fontSize: '0.7rem', opacity: 0.4 }}>
+                                                {new Date(shift.openDate).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} → {new Date(shift.closeDate).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                                            </p>
+                                        </div>
+                                        <div style={{ textAlign: 'right' }}>
+                                            <p style={{ fontSize: '1.1rem', fontWeight: 900, color: '#22c55e' }}>${shift.totalRevenue.toLocaleString()}</p>
+                                            <p style={{ fontSize: '0.65rem', color: 'var(--text-muted)' }}>Facturado</p>
+                                        </div>
+                                    </div>
+                                    <div style={{ display: 'flex', gap: '1.5rem', fontSize: '0.75rem', opacity: 0.6 }}>
+                                        <span>Apertura: ${shift.openBalance.toLocaleString()}</span>
+                                        <span>Cierre: ${shift.closeBalance.toLocaleString()}</span>
+                                        <span>{shift.logs.length} movimientos</span>
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
+                    )}
+                </div>
+            )}
 
             {/* Movement Modal */}
             {movementModal && (

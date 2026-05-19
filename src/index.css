@@ -323,3 +323,35 @@ body::before {
     padding: 0 2rem;
   }
 }
+
+div:hover > div > .table-delete-btn,
+div:hover > .table-delete-btn {
+  opacity: 1 !important;
+}
+
+.search-input {
+  background: var(--bg-charcoal);
+  color: var(--text-primary);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 6px;
+  outline: none;
+  font-family: inherit;
+}
+
+.search-input::placeholder {
+  color: rgba(255, 255, 255, 0.25);
+}
+
+.search-input:focus {
+  border-color: rgba(255, 69, 0, 0.4);
+}
+
+@keyframes kds-late-pulse {
+  0%, 100% { opacity: 1; box-shadow: 0 0 0 0 rgba(212, 32, 0, 0.4); }
+  50% { opacity: 0.85; box-shadow: 0 0 0 6px rgba(212, 32, 0, 0); }
+}
+
+.kds-late {
+  animation: kds-late-pulse 1.5s ease-in-out infinite;
+  border-color: var(--fire-red) !important;
+}

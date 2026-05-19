@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useAguaraStore } from '../store/aguaraStore';
 import {
     X, Search, Flame, Wine, IceCream, UtensilsCrossed,
@@ -8,14 +8,21 @@ import {
 
 export function OrderDrawer({ table, onClose, onCheckout }) {
     const {
-        menu, activeOrders, addItemToOrder,
+        menu, activeOrders, addItemToOrder, adjustOrderItemQty,
         setTableStatus, sendToKitchen, favorites, toggleFavorite,
         modifiers, checkAvailability, recipes, getActivePrice,
         deliveryMetadata, updateDeliveryMetadata,
-        customers, selectCustomerForOrder, selectedCustomerId, getCustomerDiscount
+        customers, selectCustomerForOrder, selectedCustomerId, getCustomerDiscount,
+        categories
     } = useAguaraStore();
 
-    const [activeCategory, setActiveCategory] = useState('parrilla');
+    const [activeCategory, setActiveCategory] = useState(() => categories[0]?.id || '');
+
+    useEffect(() => {
+        if (activeCategory !== 'favorites' && !categories.find(c => c.id === activeCategory)) {
+            setActiveCategory(categories[0]?.id || '');
+        }
+    }, [categories]);
     const [searchTerm, setSearchTerm] = useState('');
     const [modifierModalItem, setModifierModalItem] = useState(null);
 
@@ -60,7 +67,7 @@ export function OrderDrawer({ table, onClose, onCheckout }) {
                 <div style={menuContainerStyle}>
                     <header style={headerStyle}>
                         <h2 className="font-serif" style={{ fontSize: '1.8rem' }}>
-                            {activeCategory === 'favorites' ? 'Destacados' : `Carta: ${activeCategory.toUpperCase()}`}
+                            {activeCategory === 'favorites' ? 'Destacados' : `Carta: ${categories.find(c => c.id === activeCategory)?.name?.toUpperCase() || activeCategory.toUpperCase()}`}
                         </h2>
                         <div className="obsidian-card" style={searchContainerStyle}>
                             <Search size={18} color="rgba(255,255,255,0.3)" />
@@ -76,10 +83,12 @@ export function OrderDrawer({ table, onClose, onCheckout }) {
 
                     <nav style={{ display: 'flex', gap: '0.75rem', flexWrap: 'wrap' }}>
                         <CategoryTab id="favorites" label="" icon={<Star size={18} fill={activeCategory === 'favorites' ? 'white' : 'transparent'} />} active={activeCategory === 'favorites'} onClick={setActiveCategory} />
-                        <CategoryTab id="parrilla" label="Parrilla" icon={<Flame size={18} />} active={activeCategory === 'parrilla'} onClick={setActiveCategory} />
-                        <CategoryTab id="entradas" label="Entradas" icon={<UtensilsCrossed size={18} />} active={activeCategory === 'entradas'} onClick={setActiveCategory} />
-                        <CategoryTab id="vinos" label="Vinos" icon={<Wine size={18} />} active={activeCategory === 'vinos'} onClick={setActiveCategory} />
-                        <CategoryTab id="postres" label="Postres" icon={<IceCream size={18} />} active={activeCategory === 'postres'} onClick={setActiveCategory} />
+                        {categories.map(cat => {
+                            const iconMap = { parrilla: <Flame size={18} />, entradas: <UtensilsCrossed size={18} />, vinos: <Wine size={18} />, postres: <IceCream size={18} /> };
+                            return (
+                                <CategoryTab key={cat.id} id={cat.id} label={cat.name} icon={iconMap[cat.id] || <UtensilsCrossed size={18} />} active={activeCategory === cat.id} onClick={setActiveCategory} />
+                            );
+                        })}
                     </nav>
 
                     <div style={gridStyle}>
@@ -138,10 +147,22 @@ export function OrderDrawer({ table, onClose, onCheckout }) {
                     <div style={orderListStyle}>
                         {tableOrder.map((item, idx) => (
                             <div key={item.lineId || idx} className="obsidian-card" style={{ ...orderItemStyle, ...getStatusStyle(item.status) }}>
-                                <div style={{ display: 'flex', gap: '0.75rem', alignItems: 'center' }}>
-                                    <div style={{ fontSize: '0.8rem', opacity: 0.6 }}>{item.quantity}x</div>
-                                    <div>
-                                        <p style={{ fontSize: '0.9rem', fontWeight: 600 }}>{item.name}</p>
+                                <div style={{ flex: 1, display: 'flex', gap: '0.75rem', alignItems: 'center', minWidth: 0 }}>
+                                    {item.status === 'pending' ? (
+                                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.3rem', flexShrink: 0 }}>
+                                            <button onClick={() => adjustOrderItemQty(table.id, item.lineId, -1)} style={qtyBtnStyle}>
+                                                <Minus size={10} />
+                                            </button>
+                                            <span style={{ fontSize: '0.8rem', fontWeight: 700, minWidth: '1.2rem', textAlign: 'center' }}>{item.quantity}</span>
+                                            <button onClick={() => adjustOrderItemQty(table.id, item.lineId, 1)} style={qtyBtnStyle}>
+                                                <Plus size={10} />
+                                            </button>
+                                        </div>
+                                    ) : (
+                                        <div style={{ fontSize: '0.8rem', opacity: 0.6, flexShrink: 0 }}>{item.quantity}x</div>
+                                    )}
+                                    <div style={{ minWidth: 0 }}>
+                                        <p style={{ fontSize: '0.9rem', fontWeight: 600, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{item.name}</p>
                                         {item.selectedModifiers?.map((m, midx) => (
                                             <p key={midx} style={{ fontSize: '0.7rem', opacity: 0.5, fontStyle: 'italic' }}>+ {m.name}</p>
                                         ))}
@@ -152,7 +173,7 @@ export function OrderDrawer({ table, onClose, onCheckout }) {
                                         </p>
                                     </div>
                                 </div>
-                                <div style={{ textAlign: 'right' }}>
+                                <div style={{ textAlign: 'right', flexShrink: 0 }}>
                                     <p style={{ fontWeight: 800 }}>${item.price * item.quantity}</p>
                                     {item.status === 'ready' && <CheckCircle2 size={14} color="#22c55e" />}
                                     {item.status === 'production' && <Clock size={14} color="var(--fire-orange)" />}
@@ -463,3 +484,4 @@ const closeButtonStyle = { background: 'transparent', border: 'none', color: 'wh
 const modalBodyStyle = { maxHeight: '400px', overflowY: 'auto', paddingRight: '0.5rem' };
 const groupTitleStyle = { fontSize: '0.8rem', opacity: 0.5, textTransform: 'uppercase', marginBottom: '0.75rem', letterSpacing: '0.05rem' };
 const optionButtonStyle = { width: '100%', padding: '1rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center', cursor: 'pointer', transition: 'all 0.2s', color: 'white' };
+const qtyBtnStyle = { background: 'rgba(255,255,255,0.08)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '4px', color: 'white', cursor: 'pointer', width: '20px', height: '20px', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 0, transition: 'all 0.2s' };
