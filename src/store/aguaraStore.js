@@ -177,7 +177,7 @@ export const useAguaraStore = create((set, get) => ({
         if (!tenantId) return;
         set({ loading: true, error: null });
         const { data, error } = await supabase
-            .from('tables')
+            .from('restaurant_tables')
             .select('*')
             .eq('tenant_id', tenantId)
             .order('name');
@@ -211,7 +211,7 @@ export const useAguaraStore = create((set, get) => ({
         set(state => ({ tables: [...state.tables, optimistic] }));
 
         const { data, error } = await supabase
-            .from('tables')
+            .from('restaurant_tables')
             .insert({ name: tableData.name, status: 'available', shape: tableData.shape || 'square', capacity: tableData.capacity || 4, position: pos, tenant_id: tenantId })
             .select()
             .single();
@@ -232,7 +232,7 @@ export const useAguaraStore = create((set, get) => ({
         const table = get().tables.find(t => t.id === tableId);
         if (!table) return;
         await supabase
-            .from('tables')
+            .from('restaurant_tables')
             .update({ name: table.name, shape: table.shape, position: table.position, capacity: table.capacity })
             .eq('id', tableId)
             .eq('tenant_id', getTenantId());
@@ -241,7 +241,7 @@ export const useAguaraStore = create((set, get) => ({
     deleteTable: async (tableId) => {
         set({ loading: true, error: null });
         const { error } = await supabase
-            .from('tables')
+            .from('restaurant_tables')
             .delete()
             .eq('id', tableId)
             .eq('tenant_id', getTenantId());
@@ -1208,7 +1208,7 @@ export const useAguaraStore = create((set, get) => ({
 
         const tablesChannel = supabase
             .channel(`tables:${tenantId}`)
-            .on('postgres_changes', { event: '*', schema: 'public', table: 'tables', filter: `tenant_id=eq.${tenantId}` }, payload => {
+            .on('postgres_changes', { event: '*', schema: 'public', table: 'restaurant_tables', filter: `tenant_id=eq.${tenantId}` }, payload => {
                 if (payload.eventType === 'INSERT') {
                     const t = payload.new;
                     set(state => {
