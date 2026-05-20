@@ -1,12 +1,20 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { signIn } from '../lib/auth';
+import { useAuthStore } from '../store/authStore';
 import { Flame } from 'lucide-react';
 
 export default function Login() {
+    const navigate = useNavigate();
+    const { role } = useAuthStore();
     const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
     const [error, setError] = useState('');
     const [loading, setLoading] = useState(false);
+
+    useEffect(() => {
+        if (role) navigate('/', { replace: true });
+    }, [role]);
 
     const handleSubmit = async (e) => {
         e.preventDefault();
