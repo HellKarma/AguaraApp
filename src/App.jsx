@@ -15,15 +15,12 @@ import Customers from './pages/Customers';
 import Settings from './pages/Settings';
 
 async function loadProfile(session, setAuth, clearAuth) {
-    console.log('[loadProfile] called, uid:', session.user.id);
     try {
-        const { data: profile, error: profileError } = await supabase
+        const { data: profile } = await supabase
             .from('users')
             .select('tenant_id, role')
             .eq('id', session.user.id)
             .single();
-
-        console.log('[loadProfile] query result:', profile, profileError);
 
         if (profile) {
             setAuth({ user: session.user, session, tenantId: profile.tenant_id, role: profile.role });
