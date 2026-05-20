@@ -16,11 +16,13 @@ import Settings from './pages/Settings';
 
 async function loadProfile(session, setAuth, clearAuth) {
     try {
-        const { data: profile } = await supabase
+        const { data: profile, error: profileError } = await supabase
             .from('users')
             .select('tenant_id, role')
             .eq('id', session.user.id)
             .single();
+
+        console.log('[loadProfile] uid:', session.user.id, 'profile:', profile, 'error:', profileError);
 
         if (profile) {
             setAuth({ user: session.user, session, tenantId: profile.tenant_id, role: profile.role });
