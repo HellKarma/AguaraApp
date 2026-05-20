@@ -725,7 +725,7 @@ export const useAguaraStore = create((set, get) => ({
             .select()
             .single();
         if (error) { set({ loading: false, error: error.message }); return; }
-        set(state => ({ menu: [...state.menu, { ...data, category: data.category_id }], loading: false }));
+        await get().fetchProducts();
     },
 
     updateProduct: async (updatedProduct) => {
@@ -736,7 +736,7 @@ export const useAguaraStore = create((set, get) => ({
             .eq('id', updatedProduct.id)
             .eq('tenant_id', getTenantId());
         if (error) { set({ loading: false, error: error.message }); return; }
-        set(state => ({ menu: state.menu.map(p => p.id === updatedProduct.id ? { ...updatedProduct } : p), loading: false }));
+        await get().fetchProducts();
     },
 
     deleteProduct: async (productId) => {
@@ -747,7 +747,7 @@ export const useAguaraStore = create((set, get) => ({
             .eq('id', productId)
             .eq('tenant_id', getTenantId());
         if (error) { set({ loading: false, error: error.message }); return; }
-        set(state => ({ menu: state.menu.filter(p => p.id !== productId), loading: false }));
+        await get().fetchProducts();
     },
 
     fetchIngredients: async () => {
