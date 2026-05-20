@@ -840,9 +840,8 @@ export const useAguaraStore = create((set, get) => ({
             .insert({ name: category.name, icon: category.icon || null, sort_order: category.sort_order ?? 0, tenant_id: tenantId })
             .select()
             .single();
-        console.log('[addCategory]', { data, error });
         if (error) { set({ loading: false, error: error.message }); return; }
-        set(state => ({ categories: [...state.categories, data], loading: false }));
+        await get().fetchCategories();
     },
 
     updateCategory: async (id, newName) => {
@@ -853,11 +852,7 @@ export const useAguaraStore = create((set, get) => ({
             .eq('id', id)
             .eq('tenant_id', getTenantId());
         if (error) { set({ loading: false, error: error.message }); return; }
-        set(state => ({
-            categories: state.categories.map(c => c.id === id ? { ...c, name: newName } : c),
-            menu: state.menu.map(p => p.category === id ? { ...p, category: id } : p),
-            loading: false
-        }));
+        await get().fetchCategories();
     },
 
     deleteCategory: async (id) => {
@@ -868,14 +863,7 @@ export const useAguaraStore = create((set, get) => ({
             .eq('id', id)
             .eq('tenant_id', getTenantId());
         if (error) { set({ loading: false, error: error.message }); return; }
-        set(state => {
-            const fallback = state.categories.find(c => c.id !== id)?.id || null;
-            return {
-                categories: state.categories.filter(c => c.id !== id),
-                menu: state.menu.map(p => p.category === id ? { ...p, category: fallback } : p),
-                loading: false
-            };
-        });
+        await get().fetchCategories();
     },
 
     fetchIngredientCategories: async () => {
