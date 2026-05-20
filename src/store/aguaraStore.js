@@ -837,7 +837,7 @@ export const useAguaraStore = create((set, get) => ({
         set({ loading: true, error: null });
         const { data, error } = await supabase
             .from('categories')
-            .insert({ name: category.name, icon: category.icon || null, tenant_id: tenantId })
+            .insert({ name: category.name, icon: category.icon || null, sort_order: category.sort_order ?? 0, tenant_id: tenantId })
             .select()
             .single();
         if (error) { set({ loading: false, error: error.message }); return; }
