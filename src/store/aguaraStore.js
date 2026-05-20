@@ -877,19 +877,28 @@ export const useAguaraStore = create((set, get) => ({
         });
     },
 
-    addIngredientCategory: (category) => set((state) => ({
-        ingredientCategories: [...state.ingredientCategories, { ...category, id: category.name.toLowerCase().replace(/\s+/g, '_') }]
-    })),
-    updateIngredientCategory: (id, newName) => set((state) => {
-        const newId = newName.toLowerCase().replace(/\s+/g, '_');
-        const updatedCategories = state.ingredientCategories.map(c => c.id === id ? { ...c, id: newId, name: newName } : c);
-        const updatedIngredients = state.ingredients.map(i => i.category === id ? { ...i, category: newId } : i);
-        return { ingredientCategories: updatedCategories, ingredients: updatedIngredients };
-    }),
-    deleteIngredientCategory: (id) => set((state) => ({
-        ingredientCategories: state.ingredientCategories.filter(c => c.id !== id),
-        ingredients: state.ingredients.map(i => i.category === id ? { ...i, category: 'otros' } : i)
-    })),
+    fetchIngredientCategories: async () => {
+        const tenantId = getTenantId(); if (!tenantId) return;
+        const { data, error } = await supabase.from('ingredient_categories').select('*').eq('tenant_id', tenantId).order('name');
+        if (error) return;
+        set({ ingredientCategories: data });
+    },
+    addIngredientCategory: async (category) => {
+        const tenantId = getTenantId(); if (!tenantId) return;
+        const { data, error } = await supabase.from('ingredient_categories').insert({ name: category.name, tenant_id: tenantId }).select().single();
+        if (error) return;
+        set(state => ({ ingredientCategories: [...state.ingredientCategories, data] }));
+    },
+    updateIngredientCategory: async (id, newName) => {
+        const tenantId = getTenantId(); if (!tenantId) return;
+        set(state => ({ ingredientCategories: state.ingredientCategories.map(c => c.id === id ? { ...c, name: newName } : c) }));
+        await supabase.from('ingredient_categories').update({ name: newName }).eq('id', id).eq('tenant_id', tenantId);
+    },
+    deleteIngredientCategory: async (id) => {
+        const tenantId = getTenantId(); if (!tenantId) return;
+        set(state => ({ ingredientCategories: state.ingredientCategories.filter(c => c.id !== id) }));
+        await supabase.from('ingredient_categories').delete().eq('id', id).eq('tenant_id', tenantId);
+    },
 
     // --- Caja Actions ---
     fetchCashSession: async () => {
