@@ -369,10 +369,10 @@ export const useAguaraStore = create((set, get) => ({
             .from('order_history')
             .select('*')
             .eq('tenant_id', tenantId)
-            .order('date', { ascending: false })
+            .order('created_at', { ascending: false })
             .limit(500);
         if (error) return;
-        set({ orderHistory: data.map(h => ({ ...h, tableName: h.table_name, customerId: h.customer_id })) });
+        set({ orderHistory: data.map(h => ({ ...h, date: h.created_at, tableName: h.table_name, customerId: h.client_id })) });
     },
 
     removeOrder: async (tableId, paymentInfo) => {
@@ -466,8 +466,8 @@ export const useAguaraStore = create((set, get) => ({
 
         // Supabase writes in background
         supabase.from('order_history').insert({
-            date: now, total: finalAmount, items: orderItems,
-            table_name: tableName, payments, customer_id: customerId || null, tenant_id: tenantId
+            total: finalAmount, items: orderItems,
+            table_name: tableName, payments, client_id: customerId || null, tenant_id: tenantId
         });
         supabase.from('orders').delete().eq('table_id', tableId).eq('tenant_id', tenantId);
         if (updatedCustomer) {
@@ -899,7 +899,7 @@ export const useAguaraStore = create((set, get) => ({
             .from('cash_sessions')
             .select('*')
             .eq('tenant_id', tenantId)
-            .eq('status', 'open')
+            .eq('is_open', true)
             .single();
         if (!session) return;
 
@@ -932,7 +932,7 @@ export const useAguaraStore = create((set, get) => ({
         const now = new Date().toISOString();
         const { data: session, error } = await supabase
             .from('cash_sessions')
-            .insert({ tenant_id: tenantId, opening_balance: amount, current_balance: amount, total_revenue: 0, status: 'open', opened_at: now })
+            .insert({ tenant_id: tenantId, opening_balance: amount, current_balance: amount, total_revenue: 0, is_open: true, opened_at: now })
             .select().single();
         if (error) return;
 
@@ -962,7 +962,7 @@ export const useAguaraStore = create((set, get) => ({
 
         if (sessionId) {
             await supabase.from('cash_sessions').update({
-                status: 'closed', closing_balance: currentBalance,
+                is_open: false, closing_balance: currentBalance,
                 total_revenue: totalRevenue, closed_at: now
             }).eq('id', sessionId).eq('tenant_id', tenantId);
 
