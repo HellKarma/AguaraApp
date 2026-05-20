@@ -14,18 +14,24 @@ import Reports from './pages/Reports';
 import Customers from './pages/Customers';
 import Settings from './pages/Settings';
 
-async function loadProfile(session, setAuth) {
-    const { data: profile } = await supabase
-        .from('users')
-        .select('tenant_id, role')
-        .eq('id', session.user.id)
-        .single();
+async function loadProfile(session, setAuth, clearAuth) {
+    try {
+        const { data: profile } = await supabase
+            .from('users')
+            .select('tenant_id, role')
+            .eq('id', session.user.id)
+            .single();
 
-    if (profile) {
-        setAuth({ user: session.user, session, tenantId: profile.tenant_id, role: profile.role });
-        if (profile.role === 'admin') {
-            await useAguaraStore.getState().seedTenantIfNew();
+        if (profile) {
+            setAuth({ user: session.user, session, tenantId: profile.tenant_id, role: profile.role });
+            if (profile.role === 'admin') {
+                await useAguaraStore.getState().seedTenantIfNew();
+            }
+        } else {
+            clearAuth();
         }
+    } catch {
+        clearAuth();
     }
 }
 
@@ -94,12 +100,12 @@ function App() {
 
     useEffect(() => {
         supabase.auth.getSession().then(async ({ data: { session } }) => {
-            if (session) await loadProfile(session, setAuth);
+            if (session) await loadProfile(session, setAuth, clearAuth);
             else clearAuth();
         });
 
         const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
-            if (session) await loadProfile(session, setAuth);
+            if (session) await loadProfile(session, setAuth, clearAuth);
             else clearAuth();
         });
 
