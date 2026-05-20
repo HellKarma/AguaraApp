@@ -840,6 +840,7 @@ export const useAguaraStore = create((set, get) => ({
             .insert({ name: category.name, icon: category.icon || null, sort_order: category.sort_order ?? 0, tenant_id: tenantId })
             .select()
             .single();
+        console.log('[addCategory]', { data, error });
         if (error) { set({ loading: false, error: error.message }); return; }
         set(state => ({ categories: [...state.categories, data], loading: false }));
     },
